@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="10" y1="2" x2="86" y2="96" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6F82FF"/>
+      <stop offset="0.5" stop-color="#2B44FF"/>
+      <stop offset="1" stop-color="#0F1766"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(26 14) rotate(45) scale(70)">
+      <stop stop-color="#fff" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="48" y1="0" x2="48" y2="96" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity="0.55"/>
+      <stop offset="0.45" stop-color="#fff" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0.18"/>
+    </linearGradient>
+    <linearGradient id="stem" x1="48" y1="26" x2="48" y2="78" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#C9D3FF"/>
+    </linearGradient>
+    <linearGradient id="hl" x1="16" y1="0" x2="80" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFC928"/>
+      <stop offset="0.6" stop-color="#FFE45C"/>
+      <stop offset="1" stop-color="#FFF1A0"/>
+    </linearGradient>
+    <filter id="drop" x="-30%" y="-20%" width="160%" height="150%">
+      <feDropShadow dx="0" dy="3" stdDeviation="2.6" flood-color="#070B45" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+  <rect width="96" height="96" rx="28" fill="url(#bg)"/>
+  <rect width="96" height="96" rx="28" fill="url(#glow)"/>
+  <rect x="0.75" y="0.75" width="94.5" height="94.5" rx="27.25" stroke="url(#rim)" stroke-width="1.5"/>
+  <!-- stem -->
+  <rect x="37.5" y="30" width="21" height="52" rx="10.5" fill="url(#stem)" filter="url(#drop)"/>
+  <!-- highlighter crossbar -->
+  <g transform="rotate(-5 48 31)" filter="url(#drop)">
+    <rect x="13" y="18" width="70" height="23" rx="7" fill="url(#hl)"/>
+    <rect x="13" y="18" width="70" height="7" rx="3.5" fill="#fff" fill-opacity="0.35"/>
+  </g>
+</svg>
