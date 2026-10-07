@@ -44,4 +44,7 @@ export const DOC_CSS = `
 .doc-body div[data-page-break]::after{content:"Page break";position:absolute;left:50%;top:-9px;transform:translateX(-50%);background:#fff;color:#8a8fa3;font:600 10px/1 system-ui,sans-serif;padding:0 8px}
 .doc-body p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#a0a6b8;float:left;height:0;pointer-events:none}
 .doc-body ::selection{background:#bcd0ff}
+.doc-body .tuon-caret{position:relative;margin-left:-1px;margin-right:-1px;border-left:2px solid var(--caret,#2b44ff);word-break:normal;pointer-events:none}
+.doc-body .tuon-caret-label{position:absolute;top:-1.5em;left:-2px;z-index:5;background:var(--caret,#2b44ff);color:#fff;font:600 10px/1 system-ui,sans-serif;letter-spacing:.01em;padding:3px 5px;border-radius:4px 4px 4px 0;white-space:nowrap;user-select:none;pointer-events:none}
+.doc-body .tuon-selection{border-radius:2px}
 `;

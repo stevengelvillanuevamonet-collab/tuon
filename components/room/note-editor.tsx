@@ -2,12 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
-import { CheckCheck, FileText, History, Lock, Minus, Plus } from "lucide-react";
+import * as Y from "yjs";
+import { CheckCheck, FileText, History, Loader2, Minus, Plus, WifiOff } from "lucide-react";
 import { toast } from "sonner";
-import { deleteNote, saveNote } from "@/lib/actions/notes";
+import { deleteNote, saveNoteState } from "@/lib/actions/notes";
+import { LOAD_ORIGIN, SEED_ORIGIN, fromB64, toB64 } from "@/lib/collab/encoding";
+import { SupabaseYProvider, type CollabChannel, type ProviderStatus } from "@/lib/collab/supabase-provider";
+import { createClient } from "@/lib/supabase/client";
 import type { DocNode } from "@/lib/export-docx";
 import type { Note, NoteVersion } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, initials } from "@/lib/utils";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DOC_CSS } from "./doc/doc-styles";
@@ -15,14 +20,12 @@ import { buildExtensions, toDocHtml } from "./doc/extensions";
 import { DEFAULT_PREFS, MARGIN_PX, loadPrefs, pageDims, savePrefs, type DocPrefs } from "./doc/prefs";
 import { printDocument } from "./doc/print";
 import { Ribbon } from "./doc/ribbon";
+import { seedUpdateFromContent } from "./doc/seed";
 import { useRoom } from "./room-provider";
 import { VersionHistory } from "./version-history";
 
 type Status = "saved" | "dirty" | "saving" | "error";
 const STATUS_LABEL: Record<Status, string> = { saved: "Saved", dirty: "Unsaved changes", saving: "Saving…", error: "Couldn't save" };
-
-/** HTML with trailing empty paragraphs removed, so the editor's own housekeeping never counts as an edit. */
-const norm = (html: string) => html.replace(/(<p>\s*<\/p>)+$/, "");
 
 const safeName = (s: string) => (s.trim() || "Untitled").replace(/[\\/:*?"<>|]+/g, "-").slice(0, 80);
 
@@ -37,35 +40,110 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+interface Boot {
+  doc: Y.Doc;
+  provider: SupabaseYProvider;
+  /** True when this note predates live editing and was converted from its saved text just now. */
+  seeded: boolean;
+}
+
 /**
- * A Word-style document editor with a ribbon, page canvas and status bar.
+ * Opens a note as a shared document. Everyone in the room can type in it at once.
  *
- * Collaboration model (unchanged from the markdown version):
- *  - Presence soft lock: the earliest person typing holds the document; others read along.
- *  - Autosave sends the version it started from. If someone else saved first, the server rejects it and we offer "use theirs" or "keep mine".
+ * 1. Load the last saved merged state from the database (or convert an older note's saved text).
+ * 2. Join the note's private Realtime channel: from then on every change is sent to, and merged with, everyone else's.
+ * 3. Render the editor once that is ready, so a document never flashes empty.
  */
 export function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => void }) {
-  const { me, canEdit, online, setEditing, profiles, removeNote } = useRoom();
+  const { me, canEdit } = useRoom();
+  const supabase = useMemo(() => createClient(), []);
+  const [boot, setBoot] = useState<Boot | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const openedContent = useRef(note.content);
+
+  useEffect(() => {
+    let cancelled = false;
+    let provider: SupabaseYProvider | null = null;
+    const doc = new Y.Doc();
+
+    (async () => {
+      const { data, error } = await supabase.from("note_states").select("ydoc").eq("note_id", note.id).maybeSingle();
+      if (cancelled) return;
+      if (error) return void setLoadError("Couldn't open this document. Check your connection and try again.");
+
+      let seeded = false;
+      if (data?.ydoc) Y.applyUpdate(doc, fromB64(data.ydoc), LOAD_ORIGIN);
+      else if (openedContent.current.trim()) {
+        Y.applyUpdate(doc, seedUpdateFromContent(openedContent.current), SEED_ORIGIN);
+        seeded = true;
+      }
+
+      await supabase.realtime.setAuth(); // private channels check the signed-in user
+      if (cancelled) return;
+      const channel = supabase.channel(`note:${note.id}`, { config: { private: true, broadcast: { self: false } } });
+      provider = new SupabaseYProvider({
+        doc,
+        channel: channel as unknown as CollabChannel,
+        readOnly: !canEdit,
+        onDestroy: () => void supabase.removeChannel(channel),
+      });
+      provider.awareness.setLocalStateField("user", { name: me.display_name, color: me.avatar_color });
+      provider.connect();
+      setBoot({ doc, provider, seeded });
+    })();
+
+    return () => {
+      cancelled = true;
+      provider?.destroy();
+      doc.destroy();
+      setBoot(null);
+    };
+  }, [supabase, note.id, canEdit, me.display_name, me.avatar_color]);
+
+  if (loadError) return <p className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">{loadError}</p>;
+  if (!boot)
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground" role="status">
+        <Loader2 className="mr-2 size-4 animate-spin" /> Opening document
+      </div>
+    );
+  return <LiveEditor key={note.id} note={note} boot={boot} onDeleted={onDeleted} />;
+}
+
+/**
+ * A Word-style document editor with a ribbon, page canvas and status bar, editing a document shared with everyone in the room.
+ *
+ *  - Typing goes into a shared Yjs document. Other people's edits and cursors arrive live and are merged in place,
+ *    so nobody is locked out and nothing is overwritten.
+ *  - Autosave stores this browser's full document; the server merges it with what's already stored, so two people
+ *    saving at once both keep their work.
+ */
+function LiveEditor({ note, boot, onDeleted }: { note: Note; boot: Boot; onDeleted: () => void }) {
+  const { doc, provider, seeded } = boot;
+  const { me, canEdit, setEditing, removeNote } = useRoom();
+  const supabase = useMemo(() => createClient(), []);
 
   const [title, setTitle] = useState(note.title);
   const [status, setStatus] = useState<Status>("saved");
-  const [conflict, setConflict] = useState<Note | null>(null);
+  const [live, setLive] = useState<ProviderStatus>(provider.status);
+  const [peers, setPeers] = useState<{ key: string; name: string; color: string }[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [prefs, setPrefsState] = useState<DocPrefs>(DEFAULT_PREFS);
   const [canvasW, setCanvasW] = useState(0);
   const [page, setPage] = useState({ current: 1, total: 1 });
   const [counts, setCounts] = useState({ words: 0, chars: 0 });
 
-  const baseVersion = useRef(note.version);
   const dirty = useRef(false);
   const saving = useRef(false);
-  const conflictRef = useRef<Note | null>(null);
-  const latest = useRef({ title: note.title, content: note.content });
-  const synced = useRef<string | null>(null); // normalised HTML the server (or the user's last save) already has
+  const editRev = useRef(0); // bumps on every local edit, so a save can tell whether more typing happened meanwhile
+  const titleDirty = useRef(false);
+  const titleRef = useRef(note.title);
+  const errorToasted = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const idleTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const saveRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
+  const saveRef = useRef<() => Promise<void>>(async () => {});
   const touchRef = useRef<() => void>(() => {});
+  const editorRef = useRef<ReturnType<typeof useEditor>>(null);
   const interacted = useRef(false); // true once the person has typed, pasted, dropped or used the ribbon
   const canvasRef = useRef<HTMLDivElement>(null);
   const paperRef = useRef<HTMLDivElement>(null);
@@ -77,35 +155,22 @@ export function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => v
     savePrefs(p);
   };
 
-  const lockedBy = useMemo(() => {
-    const editors = online.filter((p) => p.editing === note.id).sort((a, b) => (a.editing_since ?? 0) - (b.editing_since ?? 0));
-    const holder = editors[0];
-    return holder && holder.user_id !== me.id ? holder : null;
-  }, [online, note.id, me.id]);
-  const readOnly = !canEdit || Boolean(lockedBy);
+  const readOnly = !canEdit;
 
   // ── editor ──
   const editor = useEditor(
     {
-      extensions: buildExtensions(),
-      content: toDocHtml(note.content),
+      extensions: buildExtensions({ doc, provider, user: { name: me.display_name, color: me.avatar_color } }),
       editable: !readOnly,
       immediatelyRender: false,
       editorProps: { attributes: { spellcheck: "true", "aria-label": "Document", "aria-multiline": "true" } },
-      onCreate: ({ editor: e }) => {
-        synced.current = norm(e.getHTML());
-      },
-      onUpdate: ({ editor: e }) => {
-        const html = e.getHTML();
-        latest.current = { ...latest.current, content: html };
-        if (!interacted.current) return; // the editor tidying up after loading, not an edit
-        if (!dirty.current && synced.current !== null && norm(html) === synced.current) return;
-        touchRef.current();
-        setCounts({ words: e.storage.characterCount.words(), chars: e.storage.characterCount.characters() });
-      },
+      onUpdate: ({ editor: e }) => setCounts({ words: e.storage.characterCount.words(), chars: e.storage.characterCount.characters() }),
     },
     [],
   );
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
 
   useEffect(() => {
     editor?.setEditable(!readOnly);
@@ -116,62 +181,90 @@ export function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => v
     setCounts({ words: editor.storage.characterCount.words(), chars: editor.storage.characterCount.characters() });
   }, [editor]);
 
+  // connection state and who else is in the document
+  useEffect(() => provider.onStatus(setLive), [provider]);
+  useEffect(() => {
+    const aw = provider.awareness;
+    const update = () => {
+      const seen = new Map<string, { key: string; name: string; color: string }>();
+      aw.getStates().forEach((state, clientId) => {
+        const u = (state as { user?: { name?: string; color?: string } }).user;
+        if (clientId === doc.clientID || !u?.name) return;
+        seen.set(`${u.name}|${u.color}`, { key: `${u.name}|${u.color}`, name: u.name, color: u.color ?? "#8d98b8" });
+      });
+      setPeers([...seen.values()]);
+    };
+    aw.on("change", update);
+    update();
+    return () => aw.off("change", update);
+  }, [provider, doc]);
+
+  // view-only members can't announce themselves to peers, so they pick up newer saves from the database
+  useEffect(() => {
+    if (canEdit) return;
+    let cancelled = false;
+    void supabase
+      .from("note_states")
+      .select("ydoc")
+      .eq("note_id", note.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled && data?.ydoc) Y.applyUpdate(doc, fromB64(data.ydoc), LOAD_ORIGIN);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canEdit, supabase, note.id, note.version, doc]);
+
   // ── saving ──
-  const scheduleSave = useCallback(() => {
+  const scheduleSave = useCallback((delay = 1200) => {
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => void saveRef.current(), 1000);
+    saveTimer.current = setTimeout(() => void saveRef.current(), delay);
   }, []);
 
-  const save = useCallback(
-    async (force = false) => {
-      clearTimeout(saveTimer.current);
-      if (conflictRef.current && !force) return;
-      if (saving.current) return void scheduleSave();
-      saving.current = true;
-      const snapshot = { ...latest.current };
-      setStatus("saving");
-      const res = await saveNote({ noteId: note.id, title: snapshot.title, content: snapshot.content, baseVersion: baseVersion.current, force });
-      saving.current = false;
+  const save = useCallback(async () => {
+    clearTimeout(saveTimer.current);
+    const ed = editorRef.current;
+    if (!ed || ed.isDestroyed) return;
+    if (saving.current) return void scheduleSave();
+    saving.current = true;
+    setStatus("saving");
+    const rev = editRev.current;
+    const sentTitle = titleDirty.current ? titleRef.current : undefined;
+    const res = await saveNoteState({ noteId: note.id, title: sentTitle, content: ed.getHTML(), update: toB64(Y.encodeStateAsUpdate(doc)) });
+    saving.current = false;
 
-      if (res.ok) {
-        baseVersion.current = Math.max(baseVersion.current, res.version);
-        conflictRef.current = null;
-        setConflict(null);
-        if (latest.current.title === snapshot.title && latest.current.content === snapshot.content) {
-          dirty.current = false;
-          synced.current = norm(snapshot.content);
-          setStatus("saved");
-        } else {
-          setStatus("dirty");
-          scheduleSave();
-        }
-      } else if (res.conflict) {
-        conflictRef.current = res.latest;
-        setConflict(res.latest);
-        setStatus("error");
+    if (res.ok) {
+      errorToasted.current = false;
+      if (sentTitle !== undefined && titleRef.current === sentTitle) titleDirty.current = false;
+      if (editRev.current === rev) {
+        dirty.current = false;
+        setStatus("saved");
       } else {
-        setStatus("error");
-        toast.error(res.error);
+        setStatus("dirty");
+        scheduleSave();
       }
-    },
-    [note.id, scheduleSave],
-  );
+    } else {
+      setStatus("error");
+      if (!errorToasted.current) toast.error(res.error);
+      errorToasted.current = true;
+      scheduleSave(6000); // keep trying quietly; the text is still on screen
+    }
+  }, [note.id, doc, scheduleSave]);
   useEffect(() => {
     saveRef.current = save;
   }, [save]);
 
   const scheduleIdle = useCallback(() => {
     clearTimeout(idleTimer.current);
-    idleTimer.current = setTimeout(() => {
-      if (dirty.current) scheduleIdle();
-      else setEditing(null);
-    }, 6000);
+    idleTimer.current = setTimeout(() => setEditing(null), 6000);
   }, [setEditing]);
 
   const touch = useCallback(() => {
     dirty.current = true;
-    setStatus("dirty");
-    setEditing(note.id);
+    editRev.current++;
+    setStatus((s) => (s === "saving" ? s : "dirty"));
+    setEditing(note.id); // lets the notes list show a "someone is editing" dot
     scheduleSave();
     scheduleIdle();
   }, [note.id, setEditing, scheduleSave, scheduleIdle]);
@@ -179,25 +272,35 @@ export function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => v
     touchRef.current = touch;
   }, [touch]);
 
-  // changes arriving from other people over Realtime
+  // any change made in this browser (not one that arrived from someone else, or the initial load) counts as an edit
   useEffect(() => {
-    if (note.version <= baseVersion.current || !editor) return;
-    if (!dirty.current) {
-      const html = toDocHtml(note.content);
-      if (editor.getHTML() !== html) editor.commands.setContent(html, { emitUpdate: false });
-      synced.current = norm(editor.getHTML());
-      setTitle(note.title);
-      latest.current = { title: note.title, content: note.content };
-      baseVersion.current = note.version;
-    } else if (note.updated_by === me.id) {
-      baseVersion.current = note.version; // echo of my own save
-    } else {
-      conflictRef.current = note;
-      setConflict(note);
-    }
-  }, [note, me.id, editor]);
+    if (readOnly) return;
+    const onDocUpdate = (_update: Uint8Array, origin: unknown) => {
+      if (origin === provider || origin === LOAD_ORIGIN || origin === SEED_ORIGIN) return;
+      if (!interacted.current) return; // the editor tidying up after loading, not an edit
+      touchRef.current();
+    };
+    doc.on("update", onDocUpdate);
+    return () => doc.off("update", onDocUpdate);
+  }, [doc, provider, readOnly]);
 
-  // release the lock and flush on leave
+  // an older note was just converted to a live document: store it so the next person opens it directly
+  const seedSaved = useRef(false);
+  useEffect(() => {
+    if (!editor || !seeded || readOnly || seedSaved.current) return;
+    seedSaved.current = true;
+    dirty.current = true;
+    scheduleSave(300);
+  }, [editor, seeded, readOnly, scheduleSave]);
+
+  // a title someone else changed (arrives through the notes feed), unless I'm mid-edit on it
+  useEffect(() => {
+    if (titleDirty.current || note.title === titleRef.current) return;
+    titleRef.current = note.title;
+    setTitle(note.title);
+  }, [note.title]);
+
+  // flush on leave
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
       if (dirty.current) e.preventDefault();
@@ -207,49 +310,32 @@ export function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => v
       window.removeEventListener("beforeunload", warn);
       clearTimeout(idleTimer.current);
       clearTimeout(saveTimer.current);
-      if (dirty.current && !conflictRef.current) void saveRef.current();
+      if (dirty.current) void saveRef.current();
       setEditing(null);
     };
   }, [setEditing]);
 
   function onTitle(v: string) {
     setTitle(v);
-    latest.current = { ...latest.current, title: v };
+    titleRef.current = v;
+    titleDirty.current = true;
     touch();
   }
 
   function restore(v: NoteVersion) {
     if (!editor) return;
+    // replaces the shared document in place, so everyone currently in it sees the restored version
+    interacted.current = true;
+    editor.commands.setContent(toDocHtml(v.content), { emitUpdate: true });
     setTitle(v.title);
-    editor.commands.setContent(toDocHtml(v.content), { emitUpdate: false });
-    latest.current = { title: v.title, content: editor.getHTML() };
-    synced.current = null;
-    dirty.current = true;
-    setStatus("dirty");
-    void saveRef.current(true);
-  }
-
-  function useTheirs() {
-    if (!conflict || !editor) return;
-    setTitle(conflict.title);
-    editor.commands.setContent(toDocHtml(conflict.content), { emitUpdate: false });
-    latest.current = { title: conflict.title, content: conflict.content };
-    synced.current = norm(editor.getHTML());
-    baseVersion.current = conflict.version;
-    dirty.current = false;
-    conflictRef.current = null;
-    setConflict(null);
-    setStatus("saved");
-  }
-
-  function keepMine() {
-    if (!conflict) return;
-    baseVersion.current = conflict.version;
-    void save(true);
+    titleRef.current = v.title;
+    titleDirty.current = true;
+    touch();
+    void saveRef.current();
   }
 
   async function remove() {
-    if (!window.confirm(`Delete “${title}”? This removes its version history too.`)) return;
+    if (!window.confirm(`Delete “${title}”? This removes its version history too, for everyone in the room.`)) return;
     const res = await deleteNote(note.id);
     if (res.error) return void toast.error(res.error);
     removeNote(note.id);
@@ -316,7 +402,6 @@ export function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => v
     remove: canEdit ? () => void remove() : undefined,
   };
 
-  const conflictAuthor = conflict?.updated_by ? profiles[conflict.updated_by]?.display_name : null;
   const zoomPct = Math.round(zoom * 100);
   const setZoom = (z: number) => setPrefs({ ...prefs, zoom: Math.min(2, Math.max(0.5, Math.round(z * 100) / 100)) });
 
@@ -353,6 +438,22 @@ export function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => v
           placeholder="Untitled document"
           className="min-w-0 flex-1 bg-transparent font-display text-lg font-semibold tracking-tight outline-none placeholder:text-muted-foreground/50"
         />
+        {/* who else is in this document right now */}
+        {peers.length > 0 && (
+          <div className="flex shrink-0 items-center -space-x-1.5" aria-label={`${peers.length} other ${peers.length === 1 ? "person is" : "people are"} in this document`}>
+            {peers.slice(0, 4).map((p) => (
+              <Tooltip key={p.key}>
+                <TooltipTrigger asChild>
+                  <Avatar className="size-6 ring-2 ring-background">
+                    <AvatarFallback style={{ background: p.color }}>{initials(p.name)}</AvatarFallback>
+                  </Avatar>
+                </TooltipTrigger>
+                <TooltipContent>{p.name}</TooltipContent>
+              </Tooltip>
+            ))}
+            {peers.length > 4 && <span className="relative flex size-6 items-center justify-center rounded-full bg-muted text-[10px] font-semibold ring-2 ring-background">+{peers.length - 4}</span>}
+          </div>
+        )}
         <span className={cn("hidden shrink-0 items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex", status === "error" && "text-destructive")} role="status" aria-live="polite">
           {status === "saved" && <CheckCheck className="size-3.5 text-online" />}
           {STATUS_LABEL[status]}
@@ -368,24 +469,13 @@ export function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => v
       </div>
 
       {/* banners */}
-      {lockedBy && (
+      {live === "error" && (
         <div className="mx-4 mt-2 flex items-center gap-2 rounded-lg border bg-mark-yellow/30 px-3 py-2 text-sm" role="status">
-          <Lock className="size-4 shrink-0" />
-          <span>
-            <strong className="font-semibold">{lockedBy.name}</strong> is editing this document. It unlocks a few seconds after they stop typing.
-          </span>
+          <WifiOff className="size-4 shrink-0" />
+          <span>Live sync is unavailable right now. Your changes still save, but others will only see them after they reload.</span>
         </div>
       )}
-      {!canEdit && <div className="mx-4 mt-2 rounded-lg border bg-muted px-3 py-2 text-sm text-muted-foreground">You have view-only access to documents in this room.</div>}
-      {conflict && (
-        <div className="mx-4 mt-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm" role="alert">
-          <p className="font-medium">{conflictAuthor ?? "Someone"} saved a newer version while you were typing.</p>
-          <div className="mt-2 flex gap-2">
-            <Button size="sm" variant="outline" onClick={useTheirs}>Use their version</Button>
-            <Button size="sm" onClick={keepMine}>Keep mine</Button>
-          </div>
-        </div>
-      )}
+      {!canEdit && <div className="mx-4 mt-2 rounded-lg border bg-muted px-3 py-2 text-sm text-muted-foreground">You have view-only access to documents in this room. You can still watch edits happen live.</div>}
 
       {/* ribbon */}
       <div className="mt-2">{editor && <Ribbon editor={editor} readOnly={readOnly} prefs={prefs} setPrefs={setPrefs} file={file} />}</div>
@@ -437,7 +527,7 @@ export function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => v
         </div>
       </div>
 
-      <VersionHistory noteId={note.id} canRestore={canEdit && !lockedBy} onRestore={restore} open={historyOpen} onOpenChange={setHistoryOpen} />
+      <VersionHistory noteId={note.id} canRestore={canEdit} onRestore={restore} open={historyOpen} onOpenChange={setHistoryOpen} />
     </div>
   );
 }

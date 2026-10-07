@@ -41,6 +41,8 @@ export interface Message {
   user_id: string;
   body: string;
   created_at: string;
+  /** Set by the database when the text was changed after sending. */
+  edited_at?: string | null;
 }
 
 export interface ChatMessage extends Message {

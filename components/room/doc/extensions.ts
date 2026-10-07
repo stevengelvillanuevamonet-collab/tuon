@@ -9,7 +9,12 @@ import Placeholder from "@tiptap/extension-placeholder";
 import CharacterCount from "@tiptap/extension-character-count";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
+import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import { marked } from "marked";
+import type * as Y from "yjs";
+import { FIELD } from "@/lib/collab/encoding";
+import type { SupabaseYProvider } from "@/lib/collab/supabase-provider";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -108,11 +113,39 @@ export const PageBreak = Node.create({
   },
 });
 
-export function buildExtensions() {
+export interface CollabConfig {
+  doc: Y.Doc;
+  provider: SupabaseYProvider;
+  user: { name: string; color: string };
+}
+
+/** A cursor with the person's name above it, like Google Docs. Colours come from each person's avatar colour. */
+function renderCaret(user: Record<string, unknown>) {
+  const caret = document.createElement("span");
+  caret.className = "tuon-caret";
+  caret.style.setProperty("--caret", String(user.color ?? "#2b44ff"));
+  const label = document.createElement("span");
+  label.className = "tuon-caret-label";
+  label.textContent = String(user.name ?? "Someone");
+  caret.append(label);
+  return caret;
+}
+
+function renderSelection(user: Record<string, unknown>) {
+  return { nodeName: "span", class: "tuon-selection", style: `background-color:${String(user.color ?? "#2b44ff")}33`, "data-user": String(user.name ?? "") };
+}
+
+/**
+ * With `collab`, the document lives in a shared Yjs doc: every edit is merged with everyone else's as it happens
+ * and other people's cursors are drawn. Without it (used only to convert old notes) it is a plain editor.
+ */
+export function buildExtensions(collab?: CollabConfig) {
   return [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
       link: { openOnClick: false, autolink: true, HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" } },
+      // Yjs keeps its own undo stack so that Ctrl+Z only undoes *your* edits, never someone else's.
+      ...(collab ? { undoRedo: false as const } : {}),
     }),
     TextStyleKit.configure({ backgroundColor: false, lineHeight: false }),
     TextAlign.configure({ types: BLOCKS }),
@@ -126,6 +159,12 @@ export function buildExtensions() {
     CharacterCount,
     ParagraphFormat,
     PageBreak,
+    ...(collab
+      ? [
+          Collaboration.configure({ document: collab.doc, field: FIELD }),
+          CollaborationCaret.configure({ provider: collab.provider, user: collab.user, render: renderCaret, selectionRender: renderSelection }),
+        ]
+      : []),
   ];
 }
 

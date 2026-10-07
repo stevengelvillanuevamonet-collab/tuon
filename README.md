@@ -41,7 +41,7 @@ cp .env.example .env.local        # add your Supabase URL + anon key
 ```
 
 1. Create a Supabase project.
-2. Run the migrations in `supabase/migrations/` in order (0001, then 0002, 0003, 0004) in the SQL editor. Each is safe to re-run. `0003` adds file uploads (PDF and PowerPoint) and a private storage bucket; `0004` turns notes into Word-style documents (or `supabase db push`). It creates the tables, RLS policies, triggers, join functions and adds `messages` and `notes` to the Realtime publication.
+2. Run the migrations in `supabase/migrations/` in order (0001, then 0002, 0003, 0004, 0005) in the SQL editor. Each is safe to re-run. `0003` adds file uploads (PDF and PowerPoint) and a private storage bucket; `0004` turns notes into Word-style documents; `0005` adds editable chat messages and live multi-user documents (or `supabase db push`). It creates the tables, RLS policies, triggers, join functions and adds `messages` and `notes` to the Realtime publication.
 3. **Auth → URL Configuration:** set Site URL to your app URL and add `http://localhost:3000/auth/callback` and your production `/auth/callback` to Redirect URLs.
 4. For quick local testing you can turn off **Confirm email** under Auth → Providers → Email.
 5. `npm run dev`
@@ -92,3 +92,10 @@ Logo files are in `public/brand/` (`logo-mark.svg`, `logo-mark.png` at 512px). T
 - **Word-style documents.** Notes are rich documents (TipTap) with a ribbon, page canvas, tables, lists, fonts, colours and highlights. They export to a real `.docx` file (`lib/export-docx.ts`) and print or save to PDF from File → Print. Notes from earlier versions (markdown) are converted the first time they are opened.
 - **Files.** PDF and PowerPoint files up to 50 MB are stored in the private `room-files` bucket, and only room members can read them. PDFs open in pdf.js. `.pptx` decks are drawn in the browser with `pptx-preview`; legacy `.ppt` files and any deck the browser can't draw fall back to Microsoft's online viewer, which only works on a public https address.
 - **Local development.** Use `npm run dev` (the standard dev server). Turbopack's dev server currently can't load the `docx` library, so Word export only works with the standard server and in production.
+
+## Live editing, chat and layout (migration 0005)
+
+- **Everyone edits at once.** Notes are shared Yjs documents. Edits and cursors travel over a private Realtime channel per note (`note:<id>`) and are merged in place, with names above each cursor. Autosave sends the full document; the server merges it with the stored state (`note_states`), so simultaneous saves never overwrite each other. Older notes are converted the first time they're opened.
+- **Access.** Only room members can listen on a note channel and only owners/editors can publish (policies on `realtime.messages`). View-only members watch live but can't send.
+- **Chat.** You can edit and delete your own messages, load earlier history, mute the notification sound (remembered per device), and collapse the chat to a slim bar that shows unread messages.
+- **Layout.** The sidebar collapses to an icon rail; the theme toggle sits beside the logo. In a room, *Split view* shows notes and files side by side (or stacked) so you can read while you write.

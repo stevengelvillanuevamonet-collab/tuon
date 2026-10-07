@@ -2,6 +2,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { toast } from "sonner";
+import { useLocalFlag } from "@/lib/hooks/use-local-setting";
+import { playMessageSound, primeAudio } from "@/lib/sounds";
 import { createClient } from "@/lib/supabase/client";
 import type { ChatMessage, Member, Message, Note, PresenceMeta, Profile, Role, Room, RoomFile } from "@/lib/types";
 
@@ -26,6 +29,18 @@ interface RoomContextValue {
   connection: Connection;
   sendMessage: (body: string) => void;
   retryMessage: (id: string) => void;
+  editMessage: (id: string, body: string) => Promise<boolean>;
+  deleteMessage: (id: string) => Promise<boolean>;
+  /** True while older history exists that hasn't been loaded. */
+  hasMoreMessages: boolean;
+  loadingOlder: boolean;
+  loadOlderMessages: () => Promise<void>;
+  /** Messages from other people that arrived while the chat wasn't on screen. */
+  unread: number;
+  /** The chat panel tells the provider when it is actually visible, so unread counts and sounds stay honest. */
+  setChatVisible: (visible: boolean) => void;
+  chatMuted: boolean;
+  setChatMuted: (muted: boolean) => void;
   notifyTyping: () => void;
   setEditing: (noteId: string | null) => void;
 }
@@ -38,6 +53,7 @@ export function useRoom() {
   return ctx;
 }
 
+const PAGE = 100;
 const byCreated = (a: { created_at: string }, b: { created_at: string }) => a.created_at.localeCompare(b.created_at);
 
 export function RoomProvider({
@@ -67,6 +83,13 @@ export function RoomProvider({
   const fetchingProfiles = useRef<Set<string>>(new Set());
 
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [hasMoreMessages, setHasMoreMessages] = useState(initialMessages.length >= PAGE);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const [chatMuted, setChatMuted] = useLocalFlag("tuon-chat-muted", false);
+  const mutedRef = useRef(chatMuted);
+  const chatVisibleRef = useRef(false);
+  const messagesRef = useRef(messages);
   const [notes, setNotes] = useState<Note[]>(initialNotes);
   const [files, setFiles] = useState<RoomFile[]>(initialFiles);
   const [online, setOnline] = useState<PresenceMeta[]>([]);
@@ -77,6 +100,38 @@ export function RoomProvider({
     for (const m of initialMembers) map[m.user_id] = m.profiles;
     return map;
   });
+
+  useEffect(() => {
+    mutedRef.current = chatMuted;
+  }, [chatMuted]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // Browsers keep audio locked until the page has been clicked or typed in once.
+  useEffect(() => {
+    const unlock = () => primeAudio();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
+  const setChatVisible = useCallback((visible: boolean) => {
+    chatVisibleRef.current = visible;
+    if (visible && document.visibilityState === "visible") setUnread(0);
+  }, []);
+
+  // coming back to the tab with the chat open counts as reading it
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && chatVisibleRef.current) setUnread(0);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   const ensureProfile = useCallback(
     async (userId: string) => {
@@ -115,7 +170,7 @@ export function RoomProvider({
 
     const resync = async () => {
       const [{ data: m }, { data: n }, { data: fl }] = await Promise.all([
-        supabase.from("messages").select("*").eq("room_id", room.id).order("created_at", { ascending: false }).limit(100),
+        supabase.from("messages").select("*").eq("room_id", room.id).order("created_at", { ascending: false }).limit(PAGE),
         supabase.from("notes").select("*").eq("room_id", room.id),
         supabase.from("room_files").select("*").eq("room_id", room.id).order("created_at", { ascending: false }),
       ]);
@@ -124,7 +179,10 @@ export function RoomProvider({
         const fresh = (m as Message[]).reverse();
         setMessages((prev) => {
           const ids = new Set(fresh.map((x) => x.id));
-          return [...fresh, ...prev.filter((x) => !ids.has(x.id) && (x.pending || x.failed))].sort(byCreated);
+          const oldest = fresh[0]?.created_at;
+          // keep unsent messages, and older history the person already scrolled back to load
+          const keep = prev.filter((x) => !ids.has(x.id) && (x.pending || x.failed || (oldest !== undefined && x.created_at < oldest)));
+          return [...fresh, ...keep].sort(byCreated);
         });
       }
       if (n) setNotes((prev) => (n as Note[]).map((x) => prev.find((p) => p.id === x.id && p.version > x.version) ?? x).sort(byCreated));
@@ -146,7 +204,13 @@ export function RoomProvider({
             const { [m.user_id]: _gone, ...rest } = t;
             return rest;
           });
+          if (!mutedRef.current) playMessageSound();
+          if (!chatVisibleRef.current || document.visibilityState !== "visible") setUnread((n) => n + 1);
         }
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages", filter: `room_id=eq.${room.id}` }, (payload) => {
+        const m = payload.new as Message;
+        setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...m, pending: false, failed: false } : x)));
       })
       .on("postgres_changes", { event: "DELETE", schema: "public", table: "messages" }, (payload) => {
         const id = (payload.old as { id?: string }).id;
@@ -228,6 +292,64 @@ export function RoomProvider({
     [messages, insertMessage],
   );
 
+  /** Edit one of my messages. Shows the change at once and puts the old text back if the save fails. */
+  const editMessage = useCallback(
+    async (id: string, body: string) => {
+      const text = body.trim();
+      const before = messagesRef.current.find((m) => m.id === id);
+      if (!before || !text) return false;
+      if (text === before.body) return true;
+      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, body: text, edited_at: new Date().toISOString() } : m)));
+      const { error } = await supabase.from("messages").update({ body: text }).eq("id", id);
+      if (error) {
+        setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, body: before.body, edited_at: before.edited_at } : m)));
+        toast.error("Couldn't save your edit. You can only edit your own messages.");
+        return false;
+      }
+      return true;
+    },
+    [supabase],
+  );
+
+  /** Delete one of my messages for everyone. Removed at once; comes back if the delete is refused. */
+  const deleteMessage = useCallback(
+    async (id: string) => {
+      const before = messagesRef.current.find((m) => m.id === id);
+      if (!before) return false;
+      setMessages((prev) => prev.filter((m) => m.id !== id));
+      const { error } = await supabase.from("messages").delete().eq("id", id);
+      if (error) {
+        setMessages((prev) => (prev.some((m) => m.id === id) ? prev : [...prev, before].sort(byCreated)));
+        toast.error("Couldn't delete that message. You can only delete your own messages.");
+        return false;
+      }
+      return true;
+    },
+    [supabase],
+  );
+
+  const loadOlderMessages = useCallback(async () => {
+    const oldest = messagesRef.current.find((m) => !m.pending && !m.failed);
+    if (!oldest || loadingOlder) return;
+    setLoadingOlder(true);
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("room_id", room.id)
+      .lt("created_at", oldest.created_at)
+      .order("created_at", { ascending: false })
+      .limit(PAGE);
+    setLoadingOlder(false);
+    if (error || !data) return void toast.error("Couldn't load earlier messages.");
+    const older = (data as Message[]).reverse();
+    setHasMoreMessages(data.length >= PAGE);
+    setMessages((prev) => {
+      const ids = new Set(prev.map((x) => x.id));
+      return [...older.filter((x) => !ids.has(x.id)), ...prev].sort(byCreated);
+    });
+    for (const m of older) if (!profiles[m.user_id]) void ensureProfile(m.user_id);
+  }, [supabase, room.id, loadingOlder, profiles, ensureProfile]);
+
   const notifyTyping = useCallback(() => {
     const now = Date.now();
     if (now - lastTypingSent.current < 1800) return;
@@ -264,10 +386,19 @@ export function RoomProvider({
       connection,
       sendMessage,
       retryMessage,
+      editMessage,
+      deleteMessage,
+      hasMoreMessages,
+      loadingOlder,
+      loadOlderMessages,
+      unread,
+      setChatVisible,
+      chatMuted,
+      setChatMuted,
       notifyTyping,
       setEditing,
     }),
-    [room, me, role, initialMembers, profiles, messages, notes, upsertNote, removeNote, files, addFile, removeFile, online, typing, connection, sendMessage, retryMessage, notifyTyping, setEditing],
+    [room, me, role, initialMembers, profiles, messages, notes, upsertNote, removeNote, files, addFile, removeFile, online, typing, connection, sendMessage, retryMessage, editMessage, deleteMessage, hasMoreMessages, loadingOlder, loadOlderMessages, unread, setChatVisible, chatMuted, setChatMuted, notifyTyping, setEditing],
   );
 
   return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;

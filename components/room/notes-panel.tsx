@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { ChevronDown, FileText, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { createNote } from "@/lib/actions/notes";
-import { useMediaQuery } from "@/lib/hooks/use-media-query";
+import { useElementWidth } from "@/lib/hooks/use-element-width";
 import { cn, timeAgo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -14,8 +14,17 @@ import { NoteEditor } from "./note-editor";
 import { useRoom } from "./room-provider";
 
 export function NotesPanel() {
+  // Judge by the space this panel actually has (it may be half the screen in split view), not by the window.
+  const [boxRef, boxWidth] = useElementWidth<HTMLDivElement>();
+  return (
+    <div ref={boxRef} className="h-full">
+      <NotesPanelBody wide={boxWidth >= 820} />
+    </div>
+  );
+}
+
+function NotesPanelBody({ wide }: { wide: boolean }) {
   const { notes, room, canEdit, addNote, online } = useRoom();
-  const wide = useMediaQuery("(min-width: 1280px)");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [creating, startCreate] = useTransition();
 

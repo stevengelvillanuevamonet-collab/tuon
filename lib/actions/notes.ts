@@ -1,6 +1,8 @@
 "use server";
 
+import * as Y from "yjs";
 import { z } from "zod";
+import { fromB64, toB64 } from "@/lib/collab/encoding";
 import { createClient } from "@/lib/supabase/server";
 import type { Note, NoteVersion } from "@/lib/types";
 
@@ -22,40 +24,76 @@ export async function createNote(roomId: string): Promise<{ note?: Note; error?:
 
 const saveSchema = z.object({
   noteId: z.string().uuid(),
-  title: z.string().max(120),
+  /** Only sent when the title was edited, so saving text never overwrites someone else's new title. */
+  title: z.string().max(120).optional(),
+  /** The document as HTML, kept for exports, version history and previews. */
   content: z.string().max(1000000),
-  baseVersion: z.number().int().positive(),
-  force: z.boolean().optional(),
+  /** This browser's whole Yjs document, base64. The server merges it into what's stored. */
+  update: z.string().max(8000000),
 });
 
-export type SaveResult =
-  | { ok: true; version: number; updatedAt: string }
-  | { ok: false; conflict: true; latest: Note }
-  | { ok: false; conflict?: false; error: string };
+export type SaveResult = { ok: true; version: number; updatedAt: string } | { ok: false; error: string };
+
+function mergeStates(stored: string | null | undefined, incoming: string): string {
+  const doc = new Y.Doc();
+  if (stored) Y.applyUpdate(doc, fromB64(stored));
+  Y.applyUpdate(doc, fromB64(incoming));
+  const merged = toB64(Y.encodeStateAsUpdate(doc));
+  doc.destroy();
+  return merged;
+}
 
 /**
- * Optimistic concurrency: the update only applies if the note is still at the
- * version the editor loaded. Otherwise the caller gets the latest copy back.
+ * Saves a live document. Edits from different people are *merged*, never rejected: the stored Yjs state and this
+ * browser's state are combined, so two people saving at once both keep their changes. A revision number guards the
+ * read-merge-write, and the loop simply tries again if someone else saved in between.
  */
-export async function saveNote(input: z.infer<typeof saveSchema>): Promise<SaveResult> {
+export async function saveNoteState(input: z.infer<typeof saveSchema>): Promise<SaveResult> {
   const parsed = saveSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "That note is too large to save." };
-  const { noteId, title, content, baseVersion, force } = parsed.data;
+  const { noteId, title, content, update } = parsed.data;
 
   const supabase = await createClient();
-  let query = supabase
-    .from("notes")
-    .update({ title: title.trim() || "Untitled note", content: content })
-    .eq("id", noteId);
-  if (!force) query = query.eq("version", baseVersion);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in again to save." };
 
-  const { data, error } = await query.select("version, updated_at").maybeSingle();
-  if (error) return { ok: false, error: "Couldn't save. Check your connection." };
-  if (data) return { ok: true, version: data.version, updatedAt: data.updated_at };
+  let saved = false;
+  for (let attempt = 0; attempt < 6 && !saved; attempt++) {
+    const { data: row, error: readError } = await supabase.from("note_states").select("ydoc, rev").eq("note_id", noteId).maybeSingle();
+    if (readError) return { ok: false, error: "Couldn't save. Check your connection." };
 
-  const { data: latest } = await supabase.from("notes").select("*").eq("id", noteId).maybeSingle();
-  if (latest) return { ok: false, conflict: true, latest: latest as Note };
-  return { ok: false, error: "This note was deleted or you no longer have access." };
+    let merged: string;
+    try {
+      merged = mergeStates(row?.ydoc, update);
+    } catch {
+      return { ok: false, error: "This document couldn't be saved because its data was damaged." };
+    }
+
+    if (row) {
+      const { data, error } = await supabase
+        .from("note_states")
+        .update({ ydoc: merged, rev: row.rev + 1, updated_by: user.id, updated_at: new Date().toISOString() })
+        .eq("note_id", noteId)
+        .eq("rev", row.rev)
+        .select("rev")
+        .maybeSingle();
+      if (error) return { ok: false, error: "You don't have permission to edit this note." };
+      saved = Boolean(data); // no row back means someone saved first, so go round again
+    } else {
+      const { error } = await supabase.from("note_states").insert({ note_id: noteId, ydoc: merged, updated_by: user.id });
+      if (!error) saved = true;
+      else if (error.code !== "23505") return { ok: false, error: "You don't have permission to edit this note." };
+    }
+  }
+  if (!saved) return { ok: false, error: "Lots of people are saving at once. Your changes are still on screen and will save again in a moment." };
+
+  const patch: { content: string; title?: string } = { content };
+  if (title !== undefined) patch.title = title.trim() || "Untitled note";
+  const { data, error } = await supabase.from("notes").update(patch).eq("id", noteId).select("version, updated_at").maybeSingle();
+  if (error || !data) return { ok: false, error: "This note was deleted or you no longer have access." };
+  return { ok: true, version: data.version, updatedAt: data.updated_at };
 }
 
 export async function deleteNote(noteId: string): Promise<{ error?: string }> {
