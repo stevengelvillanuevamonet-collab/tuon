@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import type { ChatMessage, Member, Message, Note, PresenceMeta, Profile, Role, Room } from "@/lib/types";
+import type { ChatMessage, Member, Message, Note, PresenceMeta, Profile, Role, Room, RoomFile } from "@/lib/types";
 
 type Connection = "connecting" | "live" | "offline";
 
@@ -18,6 +18,9 @@ interface RoomContextValue {
   notes: Note[];
   addNote: (n: Note) => void;
   removeNote: (id: string) => void;
+  files: RoomFile[];
+  addFile: (f: RoomFile) => void;
+  removeFile: (id: string) => void;
   online: PresenceMeta[];
   typingNames: string[];
   connection: Connection;
@@ -44,6 +47,7 @@ export function RoomProvider({
   initialMembers,
   initialMessages,
   initialNotes,
+  initialFiles,
   children,
 }: {
   room: Room;
@@ -52,6 +56,7 @@ export function RoomProvider({
   initialMembers: Member[];
   initialMessages: Message[];
   initialNotes: Note[];
+  initialFiles: RoomFile[];
   children: React.ReactNode;
 }) {
   const supabase = useMemo(() => createClient(), []);
@@ -63,6 +68,7 @@ export function RoomProvider({
 
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [notes, setNotes] = useState<Note[]>(initialNotes);
+  const [files, setFiles] = useState<RoomFile[]>(initialFiles);
   const [online, setOnline] = useState<PresenceMeta[]>([]);
   const [typing, setTyping] = useState<Record<string, string>>({});
   const [connection, setConnection] = useState<Connection>("connecting");
@@ -87,6 +93,11 @@ export function RoomProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const addFile = useCallback((f: RoomFile) => {
+    setFiles((prev) => (prev.some((x) => x.id === f.id) ? prev : [f, ...prev]).sort((a, b) => b.created_at.localeCompare(a.created_at)));
+  }, []);
+  const removeFile = useCallback((id: string) => setFiles((prev) => prev.filter((f) => f.id !== id)), []);
+
   const removeNote = useCallback((id: string) => setNotes((prev) => prev.filter((n) => n.id !== id)), []);
 
   const upsertNote = useCallback((n: Note) => {
@@ -103,10 +114,12 @@ export function RoomProvider({
     let firstSubscribe = true;
 
     const resync = async () => {
-      const [{ data: m }, { data: n }] = await Promise.all([
+      const [{ data: m }, { data: n }, { data: fl }] = await Promise.all([
         supabase.from("messages").select("*").eq("room_id", room.id).order("created_at", { ascending: false }).limit(100),
         supabase.from("notes").select("*").eq("room_id", room.id),
+        supabase.from("room_files").select("*").eq("room_id", room.id).order("created_at", { ascending: false }),
       ]);
+      if (fl) setFiles(fl as RoomFile[]);
       if (m) {
         const fresh = (m as Message[]).reverse();
         setMessages((prev) => {
@@ -145,6 +158,11 @@ export function RoomProvider({
         const id = (payload.old as { id?: string }).id;
         if (id) setNotes((prev) => prev.filter((x) => x.id !== id));
       })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "room_files", filter: `room_id=eq.${room.id}` }, (p) => addFile(p.new as RoomFile))
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "room_files" }, (payload) => {
+        const id = (payload.old as { id?: string }).id;
+        if (id) setFiles((prev) => prev.filter((x) => x.id !== id));
+      })
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState<PresenceMeta>();
         const list = Object.values(state).map((metas) => metas[metas.length - 1]);
@@ -178,7 +196,7 @@ export function RoomProvider({
       void supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [supabase, room.id, me.id, ensureProfile, upsertNote]);
+  }, [supabase, room.id, me.id, ensureProfile, upsertNote, addFile]);
 
   const insertMessage = useCallback(
     async (id: string, body: string) => {
@@ -236,6 +254,9 @@ export function RoomProvider({
       notes,
       addNote: upsertNote,
       removeNote,
+      files,
+      addFile,
+      removeFile,
       online,
       typingNames: Object.entries(typing)
         .filter(([id]) => id !== me.id)
@@ -246,7 +267,7 @@ export function RoomProvider({
       notifyTyping,
       setEditing,
     }),
-    [room, me, role, initialMembers, profiles, messages, notes, upsertNote, removeNote, online, typing, connection, sendMessage, retryMessage, notifyTyping, setEditing],
+    [room, me, role, initialMembers, profiles, messages, notes, upsertNote, removeNote, files, addFile, removeFile, online, typing, connection, sendMessage, retryMessage, notifyTyping, setEditing],
   );
 
   return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;

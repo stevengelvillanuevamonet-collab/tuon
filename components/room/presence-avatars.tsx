@@ -1,12 +1,14 @@
 "use client";
 
+import { Copy } from "lucide-react";
+import { toast } from "sonner";
 import { initials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useRoom } from "./room-provider";
 
 export function PresenceAvatars() {
-  const { online, members, notes, me } = useRoom();
+  const { online, members, notes, me, room } = useRoom();
   const onlineIds = new Set(online.map((p) => p.user_id));
   const shown = online.slice(0, 4);
   const extra = online.length - shown.length;
@@ -67,6 +69,20 @@ export function PresenceAvatars() {
             ))}
           </>
         )}
+        <DropdownMenuSeparator />
+        <div className="px-2.5 pt-1 pb-1.5">
+          <div className="text-xs font-medium text-muted-foreground">Invite code</div>
+          <button
+            onClick={() => {
+              void navigator.clipboard.writeText(room.invite_code);
+              toast.success("Invite code copied");
+            }}
+            className="mt-1 flex w-full items-center justify-between rounded-md border bg-card px-2.5 py-1.5 outline-none hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="font-mono text-sm font-semibold tracking-wide select-all">{room.invite_code}</span>
+            <Copy className="size-4 text-muted-foreground" />
+          </button>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

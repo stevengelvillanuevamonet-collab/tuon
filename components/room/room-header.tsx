@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Link2, LogOut, MoreHorizontal, Trash2 } from "lucide-react";
+import { Check, Copy, KeyRound, Link2, LogOut, MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteRoom, leaveRoom } from "@/lib/actions/rooms";
 import { Badge } from "@/components/ui/badge";
@@ -13,12 +13,20 @@ import { useRoom } from "./room-provider";
 export function RoomHeader() {
   const { room, role, connection } = useRoom();
   const [copied, setCopied] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
 
   async function copyInvite() {
     await navigator.clipboard.writeText(`${window.location.origin}/join/${room.invite_code}`);
     setCopied(true);
     toast.success("Invite link copied");
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function copyCode() {
+    await navigator.clipboard.writeText(room.invite_code);
+    setCodeCopied(true);
+    toast.success("Invite code copied");
+    setTimeout(() => setCodeCopied(false), 2000);
   }
 
   return (
@@ -32,6 +40,17 @@ export function RoomHeader() {
         </span>
       )}
       <div className="ml-auto flex items-center gap-1.5">
+        <button
+          onClick={copyCode}
+          title="Click to copy the invite code"
+          aria-label={`Invite code ${room.invite_code}. Click to copy`}
+          className="hidden h-8 items-center gap-2 rounded-md border bg-card px-2.5 text-xs transition-colors outline-none hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring md:flex"
+        >
+          <KeyRound className="size-3.5 text-muted-foreground" />
+          <span className="text-muted-foreground">Code</span>
+          <span className="font-mono text-[13px] font-semibold tracking-wide select-all">{room.invite_code}</span>
+          {codeCopied ? <Check className="size-3.5 text-online" /> : <Copy className="size-3.5 text-muted-foreground" />}
+        </button>
         <PresenceAvatars />
         <Button variant="outline" size="sm" onClick={copyInvite}>
           {copied ? <Check /> : <Link2 />}
@@ -50,7 +69,7 @@ export function RoomHeader() {
                 toast.success("Invite code copied");
               }}
             >
-              <Link2 /> Copy invite code
+              <Copy /> Copy code <span className="ml-auto font-mono text-xs text-muted-foreground">{room.invite_code}</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {role === "owner" ? (

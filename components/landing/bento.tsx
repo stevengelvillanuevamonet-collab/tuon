@@ -27,11 +27,16 @@ function MiniChat() {
 function MiniMarkdown() {
   return (
     <div className="space-y-3 rounded-xl border bg-background p-4 text-sm">
-      <pre className="font-mono text-[12.5px] leading-relaxed text-muted-foreground">{"## Week 4\nRemember ==the chain rule==\n- [x] Problem set"}</pre>
-      <div className="h-px bg-border" />
-      <div>
-        <div className="font-display text-base font-bold">Week 4</div>
-        <div>
+      <div className="flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-xs font-semibold text-muted-foreground">
+        <span className="rounded bg-primary/15 px-1.5 text-primary">B</span>
+        <span className="px-1.5 italic">I</span>
+        <span className="px-1.5 underline">U</span>
+        <span className="ml-1 rounded px-1.5 [background:var(--mark-yellow)] text-[#101a33]">ab</span>
+        <span className="ml-auto font-normal">Calibri · 11</span>
+      </div>
+      <div className="rounded border bg-white px-3 py-2.5 text-[#111] shadow-sm">
+        <div className="text-[15px] leading-tight" style={{ color: "#2f5496", fontFamily: "var(--font-display)" }}>Week 4: derivatives</div>
+        <div className="mt-1 text-[13px]">
           Remember <span className="mark">the chain rule</span>
         </div>
       </div>
@@ -90,8 +95,8 @@ export function Bento() {
       />
       <BentoCard
         className="rounded-xl md:col-span-2"
-        title="Notes in markdown"
-        description="Headings, tables, checklists and code. Wrap text in == to highlight it."
+        title="Notes that feel like Word"
+        description="Fonts, tables, checklists and highlights. Download as .docx or save as PDF."
         visual={<MiniMarkdown />}
       />
       <BentoCard

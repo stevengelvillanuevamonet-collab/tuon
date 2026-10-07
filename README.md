@@ -41,7 +41,7 @@ cp .env.example .env.local        # add your Supabase URL + anon key
 ```
 
 1. Create a Supabase project.
-2. Run `supabase/migrations/0001_init.sql` in the SQL editor. If you already ran it before topics became optional, also run `0002_optional_topic.sql` (or `supabase db push`). It creates the tables, RLS policies, triggers, join functions and adds `messages` and `notes` to the Realtime publication.
+2. Run the migrations in `supabase/migrations/` in order (0001, then 0002, 0003, 0004) in the SQL editor. Each is safe to re-run. `0003` adds file uploads (PDF and PowerPoint) and a private storage bucket; `0004` turns notes into Word-style documents (or `supabase db push`). It creates the tables, RLS policies, triggers, join functions and adds `messages` and `notes` to the Realtime publication.
 3. **Auth → URL Configuration:** set Site URL to your app URL and add `http://localhost:3000/auth/callback` and your production `/auth/callback` to Redirect URLs.
 4. For quick local testing you can turn off **Confirm email** under Auth → Providers → Email.
 5. `npm run dev`
@@ -86,3 +86,9 @@ Logo files are in `public/brand/` (`logo-mark.svg`, `logo-mark.png` at 512px). T
 ## Vercel troubleshooting
 
 `vercel.json` pins `"framework": "nextjs"`. If you ever see `MIDDLEWARE_INVOCATION_FAILED` with a log like *"Failed to load the ES module: /var/task/middleware.js"*, the project's Framework Preset has been set to something other than Next.js. Fix it under Settings → Build and Deployment → Framework Preset, leave Build Command / Output Directory on their defaults, and redeploy without build cache.
+
+## Documents, files and viewers
+
+- **Word-style documents.** Notes are rich documents (TipTap) with a ribbon, page canvas, tables, lists, fonts, colours and highlights. They export to a real `.docx` file (`lib/export-docx.ts`) and print or save to PDF from File → Print. Notes from earlier versions (markdown) are converted the first time they are opened.
+- **Files.** PDF and PowerPoint files up to 50 MB are stored in the private `room-files` bucket, and only room members can read them. PDFs open in pdf.js. `.pptx` decks are drawn in the browser with `pptx-preview`; legacy `.ppt` files and any deck the browser can't draw fall back to Microsoft's online viewer, which only works on a public https address.
+- **Local development.** Use `npm run dev` (the standard dev server). Turbopack's dev server currently can't load the `docx` library, so Word export only works with the standard server and in production.

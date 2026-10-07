@@ -68,7 +68,7 @@ export function NotesPanel() {
                   <span className="truncate">{n.title || "Untitled note"}</span>
                   {editors.length > 0 && <span className="size-1.5 shrink-0 rounded-full bg-online" aria-label="Someone is editing" />}
                 </span>
-                <span className="text-xs text-muted-foreground">{timeAgo(n.updated_at)}</span>
+                <span className="text-xs text-muted-foreground" suppressHydrationWarning>{timeAgo(n.updated_at)}</span>
               </button>
             </li>
           );

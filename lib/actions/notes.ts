@@ -13,7 +13,7 @@ export async function createNote(roomId: string): Promise<{ note?: Note; error?:
 
   const { data, error } = await supabase
     .from("notes")
-    .insert({ room_id: roomId, title: "Untitled note", content_md: "", created_by: user.id, updated_by: user.id })
+    .insert({ room_id: roomId, title: "Untitled note", content: "", created_by: user.id, updated_by: user.id })
     .select("*")
     .single();
   if (error || !data) return { error: "You don't have permission to add notes in this room." };
@@ -23,7 +23,7 @@ export async function createNote(roomId: string): Promise<{ note?: Note; error?:
 const saveSchema = z.object({
   noteId: z.string().uuid(),
   title: z.string().max(120),
-  content: z.string().max(200000),
+  content: z.string().max(1000000),
   baseVersion: z.number().int().positive(),
   force: z.boolean().optional(),
 });
@@ -45,7 +45,7 @@ export async function saveNote(input: z.infer<typeof saveSchema>): Promise<SaveR
   const supabase = await createClient();
   let query = supabase
     .from("notes")
-    .update({ title: title.trim() || "Untitled note", content_md: content })
+    .update({ title: title.trim() || "Untitled note", content: content })
     .eq("id", noteId);
   if (!force) query = query.eq("version", baseVersion);
 
@@ -68,7 +68,7 @@ export async function listVersions(noteId: string): Promise<NoteVersion[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("note_versions")
-    .select("id, version, title, content_md, created_at, profiles(display_name)")
+    .select("id, version, title, content, created_at, profiles(display_name)")
     .eq("note_id", noteId)
     .order("created_at", { ascending: false })
     .limit(30);

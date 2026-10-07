@@ -1,10 +1,12 @@
 "use client";
 
-import { FileText, MessageSquare } from "lucide-react";
+import { FileText, Files, MessageSquare } from "lucide-react";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChatPanel } from "./chat-panel";
+import { FilesPanel } from "./files-panel";
+import { LeftPanel } from "./left-panel";
 import { NotesPanel } from "./notes-panel";
 import { RoomHeader } from "./room-header";
 
@@ -18,7 +20,7 @@ export function Workspace() {
         {desktop ? (
           <ResizablePanelGroup direction="horizontal" autoSaveId="tuon-room-split">
             <ResizablePanel defaultSize={62} minSize={36}>
-              <NotesPanel />
+              <LeftPanel />
             </ResizablePanel>
             <ResizableHandle withHandle />
             <ResizablePanel defaultSize={38} minSize={24}>
@@ -31,12 +33,18 @@ export function Workspace() {
               <TabsTrigger value="notes">
                 <FileText /> Notes
               </TabsTrigger>
+              <TabsTrigger value="files">
+                <Files /> Files
+              </TabsTrigger>
               <TabsTrigger value="chat">
                 <MessageSquare /> Chat
               </TabsTrigger>
             </TabsList>
             <TabsContent value="notes" className="mt-2 min-h-0 data-[state=inactive]:hidden">
               <NotesPanel />
+            </TabsContent>
+            <TabsContent value="files" className="mt-2 min-h-0 data-[state=inactive]:hidden">
+              <FilesPanel />
             </TabsContent>
             <TabsContent value="chat" className="mt-2 min-h-0 data-[state=inactive]:hidden">
               <ChatPanel />

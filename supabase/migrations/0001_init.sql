@@ -56,7 +56,7 @@ create table public.notes (
   id uuid primary key default gen_random_uuid(),
   room_id uuid not null references public.rooms (id) on delete cascade,
   title text not null default 'Untitled note' check (char_length(title) <= 120),
-  content_md text not null default '' check (char_length(content_md) <= 200000),
+  content text not null default '' check (char_length(content) <= 1000000),
   created_by uuid references public.profiles (id) on delete set null default auth.uid(),
   updated_by uuid references public.profiles (id) on delete set null default auth.uid(),
   created_at timestamptz not null default now(),
@@ -70,7 +70,7 @@ create table public.note_versions (
   note_id uuid not null references public.notes (id) on delete cascade,
   version integer not null,
   title text not null,
-  content_md text not null,
+  content text not null,
   saved_by uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now()
 );
@@ -136,11 +136,11 @@ declare
   last_snapshot timestamptz;
 begin
   new.room_id := old.room_id;
-  if new.content_md is distinct from old.content_md or new.title is distinct from old.title then
+  if new.content is distinct from old.content or new.title is distinct from old.title then
     select max(created_at) into last_snapshot from public.note_versions where note_id = old.id;
     if last_snapshot is null or last_snapshot < now() - interval '2 minutes' then
-      insert into public.note_versions (note_id, version, title, content_md, saved_by)
-      values (old.id, old.version, old.title, old.content_md, old.updated_by);
+      insert into public.note_versions (note_id, version, title, content, saved_by)
+      values (old.id, old.version, old.title, old.content, old.updated_by);
     end if;
     new.version := old.version + 1;
     new.updated_at := now();

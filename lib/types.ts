@@ -52,7 +52,7 @@ export interface Note {
   id: string;
   room_id: string;
   title: string;
-  content_md: string;
+  content: string;
   created_by: string | null;
   updated_by: string | null;
   created_at: string;
@@ -64,7 +64,7 @@ export interface NoteVersion {
   id: string;
   version: number;
   title: string;
-  content_md: string;
+  content: string;
   created_at: string;
   profiles: { display_name: string } | null;
 }
@@ -79,3 +79,14 @@ export interface PresenceMeta {
 }
 
 export type ActionState = { error?: string; message?: string } | undefined;
+
+export interface RoomFile {
+  id: string;
+  room_id: string;
+  name: string;
+  storage_path: string;
+  mime_type: string;
+  size_bytes: number;
+  uploaded_by: string;
+  created_at: string;
+}

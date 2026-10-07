@@ -73,7 +73,7 @@ export function ChatPanel() {
                   {!grouped && (
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm font-semibold">{mine ? "You" : (p?.display_name ?? "Someone")}</span>
-                      <time className="text-[11px] text-muted-foreground" dateTime={m.created_at}>
+                      <time className="text-[11px] text-muted-foreground" dateTime={m.created_at} suppressHydrationWarning>
                         {formatTime(m.created_at)}
                       </time>
                     </div>

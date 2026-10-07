@@ -57,7 +57,7 @@ export default async function Home() {
               A study room for everything you're learning.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
-              Chat with your group, write notes together in markdown, and see who&apos;s working on what, live. Use it for a class, a certification, a side project, or just on your own.
+              Chat with your group, write Word-style notes together, share PDFs and slides, and see who&apos;s working on what, live. Use it for a class, a certification, a side project, or just on your own.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <ShimmerButton as={Link} href={authed ? "/rooms" : "/signup"}>

@@ -1,16 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { History, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { listVersions } from "@/lib/actions/notes";
 import type { NoteVersion } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { htmlToText } from "./doc/extensions";
 
-export function VersionHistory({ noteId, canRestore, onRestore }: { noteId: string; canRestore: boolean; onRestore: (v: NoteVersion) => void }) {
-  const [open, setOpen] = useState(false);
+export function VersionHistory({
+  noteId,
+  canRestore,
+  onRestore,
+  open,
+  onOpenChange,
+}: {
+  noteId: string;
+  canRestore: boolean;
+  onRestore: (v: NoteVersion) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const [versions, setVersions] = useState<NoteVersion[] | null>(null);
 
   useEffect(() => {
@@ -20,16 +32,11 @@ export function VersionHistory({ noteId, canRestore, onRestore }: { noteId: stri
   }, [open, noteId]);
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Version history">
-          <History />
-        </Button>
-      </SheetTrigger>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent>
         <SheetHeader>
           <SheetTitle>Version history</SheetTitle>
-          <SheetDescription>Checkpoints are saved as the note changes. Restoring one saves it as the newest version.</SheetDescription>
+          <SheetDescription>Checkpoints are saved as the document changes. Restoring one saves it as the newest version.</SheetDescription>
         </SheetHeader>
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-2 p-5 pt-2">
@@ -54,14 +61,14 @@ export function VersionHistory({ noteId, canRestore, onRestore }: { noteId: stri
                       variant="outline"
                       onClick={() => {
                         onRestore(v);
-                        setOpen(false);
+                        onOpenChange(false);
                       }}
                     >
                       Restore
                     </Button>
                   )}
                 </div>
-                <p className="mt-2 line-clamp-3 font-mono text-xs break-words whitespace-pre-wrap text-muted-foreground">{v.content_md.slice(0, 220) || "(empty)"}</p>
+                <p className="mt-2 line-clamp-3 text-xs break-words text-muted-foreground">{htmlToText(v.content).slice(0, 240) || "(empty)"}</p>
               </div>
             ))}
           </div>

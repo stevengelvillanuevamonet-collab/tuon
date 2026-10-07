@@ -7,7 +7,7 @@ import { RoomProvider } from "@/components/room/room-provider";
 import { Workspace } from "@/components/room/workspace";
 import { requireSession } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
-import type { Member, Message, Note, Role, Room } from "@/lib/types";
+import type { Member, Message, Note, Role, Room, RoomFile } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Room" };
 
@@ -45,10 +45,11 @@ export default async function RoomPage({ params }: { params: Promise<{ roomId: s
     );
   }
 
-  const [{ data: members }, { data: messages }, { data: notes }] = await Promise.all([
+  const [{ data: members }, { data: messages }, { data: notes }, { data: files }] = await Promise.all([
     supabase.from("room_members").select("user_id, role, profiles(*)").eq("room_id", roomId),
     supabase.from("messages").select("*").eq("room_id", roomId).order("created_at", { ascending: false }).limit(100),
     supabase.from("notes").select("*").eq("room_id", roomId).order("created_at", { ascending: true }),
+    supabase.from("room_files").select("*").eq("room_id", roomId).order("created_at", { ascending: false }),
   ]);
 
   return (
@@ -61,6 +62,7 @@ export default async function RoomPage({ params }: { params: Promise<{ roomId: s
       initialMembers={(members ?? []) as unknown as Member[]}
       initialMessages={((messages ?? []) as Message[]).reverse()}
       initialNotes={(notes ?? []) as Note[]}
+      initialFiles={(files ?? []) as RoomFile[]}
     >
       <Workspace />
     </RoomProvider>
