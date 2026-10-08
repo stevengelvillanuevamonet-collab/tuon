@@ -23,6 +23,8 @@ export interface Room {
   description: string | null;
   invite_code: string;
   is_private: boolean;
+  /** What new joiners can do: "editor" (edit) or "member" (view only). Set by the owner. */
+  default_role: Exclude<Role, "owner">;
   created_by: string;
   created_at: string;
   /** Optional topic label (a class, certification, hobby…). */

@@ -1,8 +1,10 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { toast } from "sonner";
+import { removeMember as removeMemberAction, setDefaultRole as setDefaultRoleAction, setMemberRole } from "@/lib/actions/members";
 import { useLocalFlag } from "@/lib/hooks/use-local-setting";
 import { playMessageSound, primeAudio } from "@/lib/sounds";
 import { createClient } from "@/lib/supabase/client";
@@ -16,6 +18,14 @@ interface RoomContextValue {
   role: Role;
   canEdit: boolean;
   members: Member[];
+  /** What new joiners get: "editor" (can edit) or "member" (can view). */
+  defaultRole: "editor" | "member";
+  /** Owner only. Change what one person can do. Resolves true on success. */
+  changeMemberRole: (userId: string, role: "editor" | "member") => Promise<boolean>;
+  /** Owner only. Remove someone from the room. */
+  kickMember: (userId: string) => Promise<boolean>;
+  /** Owner only. Set what people get when they join from now on. */
+  changeDefaultRole: (role: "editor" | "member") => Promise<boolean>;
   profiles: Record<string, Profile>;
   messages: ChatMessage[];
   notes: Note[];
@@ -59,7 +69,7 @@ const byCreated = (a: { created_at: string }, b: { created_at: string }) => a.cr
 export function RoomProvider({
   room,
   me,
-  role,
+  role: roleProp,
   initialMembers,
   initialMessages,
   initialNotes,
@@ -76,12 +86,17 @@ export function RoomProvider({
   children: React.ReactNode;
 }) {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const roleRef = useRef<Role>(roleProp);
   const metaRef = useRef<PresenceMeta>({ user_id: me.id, name: me.display_name, color: me.avatar_color, editing: null, editing_since: null, online_at: Date.now() });
   const lastTypingSent = useRef(0);
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const fetchingProfiles = useRef<Set<string>>(new Set());
 
+  const [role, setRole] = useState<Role>(roleProp);
+  const [members, setMembers] = useState<Member[]>(initialMembers);
+  const [defaultRole, setDefaultRoleState] = useState<"editor" | "member">(room.default_role ?? "editor");
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [hasMoreMessages, setHasMoreMessages] = useState(initialMessages.length >= PAGE);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -164,6 +179,44 @@ export function RoomProvider({
     });
   }, []);
 
+  // My own access changed (or I was taken out of the room). Tell me, and make the screen match.
+  const applyMyRole = useCallback(
+    (next: Role) => {
+      const prev = roleRef.current;
+      if (next === prev) return;
+      roleRef.current = next;
+      setRole(next);
+      if (next === "member") toast("Your access changed to view only. You can still read and chat.");
+      else if (prev === "member") toast.success("You can now edit notes and upload files.");
+    },
+    [],
+  );
+
+  /** The member list from the database is the truth. Also notices if I've been removed. */
+  const refreshMembers = useCallback(async () => {
+    const { data, error } = await supabase.from("room_members").select("user_id, role, profiles(*)").eq("room_id", room.id);
+    if (error || !data) return;
+    const list = data as unknown as Member[];
+    if (!list.some((m) => m.user_id === me.id)) {
+      toast.error(`You're no longer a member of ${room.name}.`);
+      router.replace("/rooms");
+      return;
+    }
+    setMembers(list);
+    setProfiles((p) => {
+      const next = { ...p };
+      for (const m of list) next[m.user_id] = m.profiles;
+      return next;
+    });
+    const mine = list.find((m) => m.user_id === me.id);
+    if (mine) applyMyRole(mine.role);
+  }, [supabase, room.id, room.name, me.id, router, applyMyRole]);
+
+  /** Tell everyone in the room to re-read the member list (also how removals reach the person removed). */
+  const announceMembers = useCallback(() => {
+    void channelRef.current?.send({ type: "broadcast", event: "members", payload: {} });
+  }, []);
+
   // One channel per room: Postgres Changes (durable), Presence (who's here), Broadcast (typing).
   useEffect(() => {
     let firstSubscribe = true;
@@ -227,6 +280,17 @@ export function RoomProvider({
         const id = (payload.old as { id?: string }).id;
         if (id) setFiles((prev) => prev.filter((x) => x.id !== id));
       })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "room_members", filter: `room_id=eq.${room.id}` }, () => void refreshMembers())
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "room_members", filter: `room_id=eq.${room.id}` }, (payload) => {
+        const row = payload.new as { user_id: string; role: Role };
+        setMembers((prev) => prev.map((m) => (m.user_id === row.user_id ? { ...m, role: row.role } : m)));
+        if (row.user_id === me.id) applyMyRole(row.role);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${room.id}` }, (payload) => {
+        const dr = (payload.new as { default_role?: "editor" | "member" }).default_role;
+        if (dr) setDefaultRoleState(dr);
+      })
+      .on("broadcast", { event: "members" }, () => void refreshMembers())
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState<PresenceMeta>();
         const list = Object.values(state).map((metas) => metas[metas.length - 1]);
@@ -247,7 +311,10 @@ export function RoomProvider({
         if (status === "SUBSCRIBED") {
           setConnection("live");
           await channel.track(metaRef.current);
-          if (!firstSubscribe) void resync(); // catch up on anything missed while offline
+          if (!firstSubscribe) {
+            void resync(); // catch up on anything missed while offline
+            void refreshMembers();
+          }
           firstSubscribe = false;
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
           setConnection("offline");
@@ -260,7 +327,7 @@ export function RoomProvider({
       void supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [supabase, room.id, me.id, ensureProfile, upsertNote, addFile]);
+  }, [supabase, room.id, me.id, ensureProfile, upsertNote, addFile, refreshMembers, applyMyRole]);
 
   const insertMessage = useCallback(
     async (id: string, body: string) => {
@@ -364,13 +431,62 @@ export function RoomProvider({
     void channelRef.current?.track(metaRef.current);
   }, []);
 
+  const changeMemberRole = useCallback(
+    async (userId: string, next: "editor" | "member") => {
+      const before = members.find((m) => m.user_id === userId)?.role;
+      setMembers((prev) => prev.map((m) => (m.user_id === userId ? { ...m, role: next } : m)));
+      const res = await setMemberRole(room.id, userId, next);
+      if (res.error) {
+        if (before) setMembers((prev) => prev.map((m) => (m.user_id === userId ? { ...m, role: before } : m)));
+        toast.error(res.error);
+        return false;
+      }
+      announceMembers();
+      return true;
+    },
+    [members, room.id, announceMembers],
+  );
+
+  const kickMember = useCallback(
+    async (userId: string) => {
+      const res = await removeMemberAction(room.id, userId);
+      if (res.error) {
+        toast.error(res.error);
+        return false;
+      }
+      setMembers((prev) => prev.filter((m) => m.user_id !== userId));
+      announceMembers();
+      return true;
+    },
+    [room.id, announceMembers],
+  );
+
+  const changeDefaultRole = useCallback(
+    async (next: "editor" | "member") => {
+      const before = defaultRole;
+      setDefaultRoleState(next);
+      const res = await setDefaultRoleAction(room.id, next);
+      if (res.error) {
+        setDefaultRoleState(before);
+        toast.error(res.error);
+        return false;
+      }
+      return true;
+    },
+    [defaultRole, room.id],
+  );
+
   const value = useMemo<RoomContextValue>(
     () => ({
       room,
       me,
       role,
       canEdit: role === "owner" || role === "editor",
-      members: initialMembers,
+      members,
+      defaultRole,
+      changeMemberRole,
+      kickMember,
+      changeDefaultRole,
       profiles,
       messages,
       notes,
@@ -398,7 +514,7 @@ export function RoomProvider({
       notifyTyping,
       setEditing,
     }),
-    [room, me, role, initialMembers, profiles, messages, notes, upsertNote, removeNote, files, addFile, removeFile, online, typing, connection, sendMessage, retryMessage, editMessage, deleteMessage, hasMoreMessages, loadingOlder, loadOlderMessages, unread, setChatVisible, chatMuted, setChatMuted, notifyTyping, setEditing],
+    [room, me, role, members, defaultRole, changeMemberRole, kickMember, changeDefaultRole, profiles, messages, notes, upsertNote, removeNote, files, addFile, removeFile, online, typing, connection, sendMessage, retryMessage, editMessage, deleteMessage, hasMoreMessages, loadingOlder, loadOlderMessages, unread, setChatVisible, chatMuted, setChatMuted, notifyTyping, setEditing],
   );
 
   return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;

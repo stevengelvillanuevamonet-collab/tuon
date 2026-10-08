@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, KeyRound, Link2, LogOut, MoreHorizontal, Trash2 } from "lucide-react";
+import { Check, Copy, Eye, KeyRound, Link2, LogOut, MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteRoom, leaveRoom } from "@/lib/actions/rooms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { MembersButton } from "./members-dialog";
 import { PresenceAvatars } from "./presence-avatars";
 import { useRoom } from "./room-provider";
 
@@ -33,6 +34,11 @@ export function RoomHeader() {
     <header className="flex h-12 shrink-0 items-center gap-3 border-b bg-card/60 px-4">
       {room.courses && <Badge variant="course">{room.courses.code}</Badge>}
       <h1 className="min-w-0 truncate font-display text-base font-semibold tracking-tight">{room.name}</h1>
+      {role === "member" && (
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground" title="The owner set your access to view only">
+          <Eye className="size-3" /> View only
+        </span>
+      )}
       {connection !== "live" && (
         <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex" role="status">
           <span className="size-1.5 rounded-full bg-mark-pink" />
@@ -52,6 +58,7 @@ export function RoomHeader() {
           {codeCopied ? <Check className="size-3.5 text-online" /> : <Copy className="size-3.5 text-muted-foreground" />}
         </button>
         <PresenceAvatars />
+        <MembersButton />
         <Button variant="outline" size="sm" onClick={copyInvite}>
           {copied ? <Check /> : <Link2 />}
           <span className="hidden sm:inline">Invite</span>

@@ -41,7 +41,7 @@ cp .env.example .env.local        # add your Supabase URL + anon key
 ```
 
 1. Create a Supabase project.
-2. Run the migrations in `supabase/migrations/` in order (0001, then 0002, 0003, 0004, 0005) in the SQL editor. Each is safe to re-run. `0003` adds file uploads (PDF and PowerPoint) and a private storage bucket; `0004` turns notes into Word-style documents; `0005` adds editable chat messages and live multi-user documents (or `supabase db push`). It creates the tables, RLS policies, triggers, join functions and adds `messages` and `notes` to the Realtime publication.
+2. Run the migrations in `supabase/migrations/` in order (0001 to 0006) in the SQL editor. Each is safe to re-run. `0003` adds file uploads (PDF and PowerPoint) and a private storage bucket; `0004` turns notes into Word-style documents; `0005` adds editable chat messages and live multi-user documents ; `0006` lets owners manage member roles (or `supabase db push`). It creates the tables, RLS policies, triggers, join functions and adds `messages` and `notes` to the Realtime publication.
 3. **Auth → URL Configuration:** set Site URL to your app URL and add `http://localhost:3000/auth/callback` and your production `/auth/callback` to Redirect URLs.
 4. For quick local testing you can turn off **Confirm email** under Auth → Providers → Email.
 5. `npm run dev`
@@ -99,3 +99,18 @@ Logo files are in `public/brand/` (`logo-mark.svg`, `logo-mark.png` at 512px). T
 - **Access.** Only room members can listen on a note channel and only owners/editors can publish (policies on `realtime.messages`). View-only members watch live but can't send.
 - **Chat.** You can edit and delete your own messages, load earlier history, mute the notification sound (remembered per device), and collapse the chat to a slim bar that shows unread messages.
 - **Layout.** The sidebar collapses to an icon rail; the theme toggle sits beside the logo. In a room, *Split view* shows notes and files side by side (or stacked) so you can read while you write.
+
+## Member roles (migration 0006)
+
+The room owner opens **Members** in the room header to decide who can edit and who can only view.
+
+| Role | In the app | Can do |
+| --- | --- | --- |
+| owner | Owner | Everything, plus manage members and delete the room |
+| editor | Can edit | Write notes, upload files, chat |
+| member | Can view | Read notes and files, watch edits live, chat |
+
+- Owners change anyone's access with the dropdown on their row, or remove them from the room. Changes apply instantly: the person affected sees their screen update without reloading.
+- Owners also choose what people get **when they join with the invite link** (Can edit by default). It only affects new joiners.
+- The owner's own role can't be changed and ownership can't be handed out this way. This is enforced by a database trigger as well as the UI.
+- Known limit: a live note channel checks a person's role when it connects. The app reconnects the moment someone's access changes, but a deliberately tampered browser could keep an old channel open until it drops. Saving to the database is blocked immediately either way.

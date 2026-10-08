@@ -37,7 +37,7 @@ export default async function RoomPage({ params }: { params: Promise<{ roomId: s
           <div className="mt-6 flex items-center gap-3">
             <JoinRoomButton roomId={r.id} size="lg" />
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Lock className="size-3" /> Members can read and write notes
+              <Lock className="size-3" /> {r.default_role === "member" ? "You'll join as view only: read notes and files, and chat" : "Members can read and write notes"}
             </span>
           </div>
         </div>
