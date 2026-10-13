@@ -30,6 +30,12 @@
   --mark-pink: #ffb3cb;
   --mark-mint: #9ceccb;
   --mark-text: #101a33;
+
+  /* Aurora text and glass: darker stops in light mode so they stay readable on paper */
+  --aurora-1: #2b44ff;
+  --aurora-2: #8e4ec6;
+  --aurora-3: #0f9d8a;
+  --aurora-4: #d98a00;
 }
 
 .dark {
@@ -57,6 +63,11 @@
   --mark-pink: #ff9dbb;
   --mark-mint: #7fe3bb;
   --mark-text: #0d1222;
+
+  --aurora-1: #7b8cff;
+  --aurora-2: #c58bff;
+  --aurora-3: #3dd9c0;
+  --aurora-4: #ffd23f;
 }
 
 @theme inline {
@@ -99,6 +110,10 @@
   --animate-shimmer-slide: shimmer-slide var(--speed, 3s) ease-in-out infinite alternate;
   --animate-spin-around: spin-around calc(var(--speed, 3s) * 2) infinite linear;
   --animate-caret: caret 1s steps(1) infinite;
+  --animate-shine: shine 3.2s linear infinite;
+  --animate-aurora-text: aurora-text 6s linear infinite;
+  --animate-skeleton: skeleton 1.6s linear infinite;
+  --animate-indeterminate: indeterminate 1.4s ease-in-out infinite;
 }
 
 @keyframes spotlight {
@@ -121,6 +136,21 @@
 @keyframes caret {
   50% { opacity: 0; }
 }
+@keyframes shine {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}
+@keyframes aurora-text {
+  to { background-position: 300% 0; }
+}
+@keyframes skeleton {
+  to { background-position: -300% 0; }
+}
+@keyframes indeterminate {
+  0% { transform: translateX(-100%) scaleX(0.4); }
+  50% { transform: translateX(60%) scaleX(0.7); }
+  100% { transform: translateX(220%) scaleX(0.4); }
+}
 @keyframes mark-in {
   from { background-size: 0% 100%; }
   to { background-size: 100% 100%; }
@@ -130,7 +160,14 @@
   * { @apply border-border outline-ring/50; }
   html { color-scheme: light; }
   html.dark { color-scheme: dark; }
-  body { @apply bg-background text-foreground font-sans antialiased; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    /* Soft glow that shows when WebGL is unavailable, and sits under the aurora when it isn't. */
+    background-image:
+      radial-gradient(900px 520px at 10% -8%, color-mix(in srgb, var(--primary) 14%, transparent), transparent 62%),
+      radial-gradient(760px 480px at 100% 0%, color-mix(in srgb, #8e4ec6 10%, transparent), transparent 60%);
+    background-attachment: fixed;
+  }
   h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.02em; }
   :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 }
@@ -185,6 +222,25 @@
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+/* ── Glass surfaces and the glowing card edge ── */
+@utility glass {
+  background-color: color-mix(in srgb, var(--card) 62%, transparent);
+  border: 1px solid var(--border);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+}
+
+.glow-edge {
+  padding: 2px;
+  opacity: var(--glow-o, 0);
+  transition: opacity 0.35s;
+  background: conic-gradient(from var(--glow-a, 0deg), transparent 0deg, var(--primary) 50deg, var(--mark-yellow) 100deg, transparent 160deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  mask-composite: exclude;
 }
 
 /* ── Banter loader (adapted from Uiverse, by Nawsome) ── */

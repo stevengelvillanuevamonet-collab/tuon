@@ -4,6 +4,7 @@ import { Copy } from "lucide-react";
 import { toast } from "sonner";
 import { initials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { AvatarCircles } from "@/components/magic/avatar-circles";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useRoom } from "./room-provider";
 
@@ -11,7 +12,6 @@ export function PresenceAvatars() {
   const { online, members, notes, me, room } = useRoom();
   const onlineIds = new Set(online.map((p) => p.user_id));
   const shown = online.slice(0, 4);
-  const extra = online.length - shown.length;
   const offline = members.filter((m) => !onlineIds.has(m.user_id));
 
   return (
@@ -20,19 +20,7 @@ export function PresenceAvatars() {
         className="flex items-center gap-2 rounded-full py-1 pr-2 pl-1 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`${online.length} online. View members`}
       >
-        <span className="flex -space-x-2">
-          {shown.map((p) => (
-            <span key={p.user_id} className="relative">
-              <Avatar className="size-7 ring-2 ring-background">
-                <AvatarFallback style={{ background: p.color }}>{initials(p.name)}</AvatarFallback>
-              </Avatar>
-              <span className="absolute right-0 bottom-0 size-2 rounded-full bg-online ring-2 ring-background" />
-            </span>
-          ))}
-          {extra > 0 && (
-            <span className="relative flex size-7 items-center justify-center rounded-full bg-muted text-[10px] font-semibold ring-2 ring-background">+{extra}</span>
-          )}
-        </span>
+        <AvatarCircles people={shown.map((p) => ({ id: p.user_id, name: p.name, color: p.color, online: true }))} max={4} total={online.length} />
         <span className="hidden text-xs text-muted-foreground sm:inline">{online.length} online</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">

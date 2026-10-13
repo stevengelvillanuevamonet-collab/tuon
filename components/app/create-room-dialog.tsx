@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 export function CreateRoomDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
@@ -43,12 +44,12 @@ export function CreateRoomDialog({ open, onOpenChange }: { open: boolean; onOpen
             <Label htmlFor="description">Description <span className="font-normal text-muted-foreground">(optional)</span></Label>
             <Textarea id="description" name="description" placeholder="What are you working on together?" maxLength={280} rows={2} />
           </div>
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border bg-card p-3 text-sm">
-            <input type="checkbox" name="isPrivate" checked={priv} onChange={(e) => setPriv(e.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
+          <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-card/60 p-3 text-sm">
             <span>
               <span className="font-medium">Invite only</span>
               <span className="block text-muted-foreground">Hidden from discovery. People join with your invite link.</span>
             </span>
+            <Switch name="isPrivate" checked={priv} onCheckedChange={setPriv} aria-label="Invite only" />
           </label>
           {state?.error && (
             <p role="alert" className="text-sm text-destructive">

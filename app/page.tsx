@@ -2,11 +2,14 @@ import Link from "next/link";
 import { Bento } from "@/components/landing/bento";
 import { HeroDemo } from "@/components/landing/hero-demo";
 import { Logo } from "@/components/brand/logo";
-import { DotPattern } from "@/components/magic/dot-pattern";
+import { AuroraText } from "@/components/magic/aurora-text";
+import { BlurText } from "@/components/magic/blur-text";
 import { BorderBeam } from "@/components/magic/border-beam";
 import { ShimmerButton } from "@/components/magic/shimmer-button";
-import { Spotlight } from "@/components/magic/spotlight";
+import { ShinyText } from "@/components/magic/shiny-text";
+import { TiltCard } from "@/components/magic/tilt-card";
 import { Button } from "@/components/ui/button";
+import { BackgroundDock } from "@/components/app/background-dock";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { getSession } from "@/lib/data";
 import { getSupabaseEnv } from "@/lib/supabase/env";
@@ -50,13 +53,15 @@ export default async function Home() {
 
       <main>
         <section className="relative">
-          <DotPattern className="[mask-image:radial-gradient(70%_60%_at_50%_0%,#000,transparent)]" />
-          <Spotlight className="-top-40 left-0 md:-top-20 md:left-40" />
           <div className="relative z-10 mx-auto max-w-6xl px-5 pt-14 pb-20 md:pt-20">
+            <p className="glass mb-7 inline-flex items-center gap-2.5 rounded-full py-1.5 pr-4 pl-3 text-sm">
+              <span className="size-2 rounded-full bg-[var(--mark-yellow)] ring-4 ring-[var(--mark-yellow)]/25" aria-hidden />
+              <ShinyText>Every note now keeps its version history</ShinyText>
+            </p>
             <h1 className="max-w-4xl text-[2.75rem] leading-[1.02] font-bold text-balance sm:text-6xl md:text-7xl">
-              A study room for everything you're learning.
+              <BlurText text="A study room for everything you're learning." />
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-foreground/75">
               Chat with your group, write Word-style notes together, share PDFs and slides, and see who&apos;s working on what, live. Use it for a class, a certification, a side project, or just on your own.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
@@ -69,14 +74,16 @@ export default async function Home() {
             </div>
 
             <div className="mt-14">
-              <HeroDemo />
+              <TiltCard max={3.5}>
+                <HeroDemo />
+              </TiltCard>
             </div>
           </div>
         </section>
 
         <section className="mx-auto max-w-6xl px-5 py-24">
           <h2 className="max-w-2xl text-3xl leading-tight font-bold text-balance sm:text-4xl">
-            Everything a study group needs, in one window.
+            <AuroraText>Everything a study group needs, in one window.</AuroraText>
           </h2>
           <div className="mt-10">
             <Bento />
@@ -97,7 +104,9 @@ export default async function Home() {
         </section>
       </main>
 
-      <footer className="border-t">
+      <BackgroundDock />
+
+      <footer className="border-t pb-24">
         <div className="mx-auto flex max-w-6xl items-center px-5 py-6">
           <Logo className="text-base" />
         </div>

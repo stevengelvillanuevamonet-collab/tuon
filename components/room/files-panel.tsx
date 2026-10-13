@@ -8,6 +8,7 @@ import { ACCEPT, FILE_BUCKET, extOf, fileKind, formatBytes, mimeFor, validateFil
 import type { RoomFile } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileViewer } from "./file-viewer";
 import { useRoom } from "./room-provider";
@@ -126,9 +127,12 @@ export function FilesPanel() {
       <ScrollArea className="min-h-0 flex-1">
         <ul className="space-y-2 p-4">
           {uploading.map((u) => (
-            <li key={u.id} className="flex items-center gap-3 rounded-xl border border-dashed bg-card/60 p-3 text-sm">
-              <Loader2 className="size-5 animate-spin text-primary" />
-              <span className="min-w-0 flex-1 truncate">Uploading {u.name}</span>
+            <li key={u.id} className="rounded-xl border border-dashed bg-card/60 p-3 text-sm">
+              <div className="flex items-center gap-3">
+                <Loader2 className="size-5 animate-spin text-primary" />
+                <span className="min-w-0 flex-1 truncate">Uploading {u.name}</span>
+              </div>
+              <Progress className="mt-2.5" aria-label={`Uploading ${u.name}`} />
             </li>
           ))}
           {files.map((f) => {

@@ -20,7 +20,7 @@ export function ShimmerButton({
     <Comp
       style={{ "--spread": "90deg", "--shimmer-color": shimmerColor, "--radius": "0.75rem", "--speed": "3s", "--cut": "0.08em", "--bg": background } as React.CSSProperties}
       className={cn(
-        "group relative z-0 inline-flex h-11 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-[var(--radius)] border border-white/10 px-6 text-[15px] font-medium whitespace-nowrap text-background [background:var(--bg)] [transform:translateZ(0)] transition-transform duration-300 ease-in-out active:translate-y-px",
+        "group relative z-0 inline-flex h-11 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-[var(--radius)] border border-white/10 px-6 text-[15px] font-medium whitespace-nowrap text-background [background:var(--bg)] [transform:translateZ(0)] transition-[transform,box-shadow] duration-300 ease-in-out hover:-translate-y-px hover:shadow-[0_10px_30px_-10px_color-mix(in_srgb,var(--primary)_60%,transparent)] active:translate-y-px",
         className,
       )}
       {...props}

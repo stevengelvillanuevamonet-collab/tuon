@@ -3,12 +3,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Check, Lock } from "lucide-react";
-import { DotPattern } from "@/components/magic/dot-pattern";
-import { Spotlight } from "@/components/magic/spotlight";
+import { LogoMark } from "@/components/brand/logo";
+import { AnimatedBeam } from "@/components/magic/animated-beam";
+import { TiltCard } from "@/components/magic/tilt-card";
 
 /**
  * The right-hand panel on the sign-in / sign-up pages.
- * It's deliberately theme-independent (always deep navy) so it looks the same in light and dark mode.
+ * It has no background of its own: the Aurora scene runs behind the whole page, so the form and this
+ * panel share one atmosphere. The mini-room is frosted glass and follows the cursor in 3D.
  */
 
 const people = {
@@ -51,6 +53,42 @@ function Initial({ name, color, size = 28 }: { name: string; color: string; size
   );
 }
 
+function PresenceCard({ float }: { float?: { y: number[] } }) {
+  const container = useRef<HTMLDivElement>(null);
+  const a = useRef<HTMLSpanElement>(null);
+  const b = useRef<HTMLSpanElement>(null);
+  const c = useRef<HTMLSpanElement>(null);
+  const room = useRef<HTMLSpanElement>(null);
+  const refs = [a, b, c];
+  const list = Object.values(people);
+
+  return (
+    <motion.div className="glass absolute top-[430px] left-3 z-20 rounded-2xl px-4 py-3 shadow-xl" animate={float} transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}>
+      <div ref={container} className="relative flex items-center gap-11">
+        <div className="flex flex-col gap-1.5">
+          {list.map((p, i) => (
+            <span key={p.name} ref={refs[i]} className="relative z-10 rounded-full ring-2 ring-card">
+              <Initial name={p.name} color={p.color} size={24} />
+            </span>
+          ))}
+        </div>
+        <span ref={room} className="relative z-10 rounded-xl ring-4 ring-card">
+          <LogoMark className="size-10" />
+        </span>
+        <div className="relative z-10 text-sm">
+          <div className="flex items-center gap-1.5 font-medium">
+            <span className="size-2 rounded-full bg-online" /> 3 online
+          </div>
+          <div className="text-xs text-muted-foreground">Ligaya, Miguel at Andrea</div>
+        </div>
+        {refs.map((r, i) => (
+          <AnimatedBeam key={i} containerRef={container} fromRef={r} toRef={room} curvature={(i - 1) * -18} delay={i * 0.6} />
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
 export function AuthShowcase() {
   const reduce = useReducedMotion();
   const stageRef = useRef<HTMLDivElement>(null);
@@ -80,24 +118,20 @@ export function AuthShowcase() {
   const float = reduce ? undefined : { y: [0, -9, 0] };
 
   return (
-    <div className="relative h-full overflow-hidden bg-[#0A0F2C] text-white">
-      {/* atmosphere */}
-      <div className="absolute inset-0" style={{ background: "radial-gradient(900px 600px at 85% 95%, rgba(43,68,255,.55), transparent 70%), radial-gradient(700px 500px at 0% 0%, rgba(123,140,255,.22), transparent 65%)" }} />
-      <DotPattern className="fill-white/15 [mask-image:radial-gradient(80%_75%_at_60%_50%,#000,transparent)]" />
-      <Spotlight className="-top-40 left-10" fill="#7B8CFF" />
-
+    <div className="relative h-full overflow-hidden text-foreground">
       <div className="relative z-10 flex h-full flex-col justify-center p-12 xl:p-16">
         <div className="max-w-xl">
           <h2 className="font-display text-4xl leading-[1.05] font-bold text-balance xl:text-5xl">
             Mag-aral nang <span className="mark [--mark-color:#FFE45C]">sabay-sabay.</span>
           </h2>
-          <p className="mt-4 max-w-md text-base leading-relaxed text-white/65 xl:text-lg">
+          <p className="mt-4 max-w-md text-base leading-relaxed text-foreground/75 xl:text-lg">
             Chat, notes and presence in one live room. See changes the moment your group makes them.
           </p>
         </div>
 
         {/* stage */}
-        <div ref={stageRef} className="relative mt-12 flex-none" style={{ height: 540 * scale }}>
+        <TiltCard max={3} className="mt-12">
+        <div ref={stageRef} className="relative flex-none" style={{ height: 540 * scale }}>
          <div className="absolute top-0 left-0 h-[540px] w-[900px]" style={{ transform: `scale(${scale})`, transformOrigin: "top left" }}>
           <div style={{ perspective: 1800 }} className="absolute top-0 left-0 w-[860px] max-w-none">
             <motion.div
@@ -105,21 +139,21 @@ export function AuthShowcase() {
               animate={{ opacity: 1, y: 0, rotateY: -9 }}
               transition={{ duration: 0.9, ease: [0.2, 0.8, 0.2, 1] }}
               style={{ rotateX: 3, transformOrigin: "left center" }}
-              className="overflow-hidden rounded-2xl border border-white/20 bg-white text-[#101A33] shadow-[0_50px_120px_-30px_rgba(0,0,0,.7)]"
+              className="glass overflow-hidden rounded-2xl text-foreground shadow-[0_50px_120px_-30px_rgba(8,12,40,.6)]"
             >
               {/* chrome */}
-              <div className="flex items-center gap-3 border-b border-[#D9DFEE] px-4 py-2.5">
+              <div className="flex items-center gap-3 border-b px-4 py-2.5">
                 <div className="flex gap-1.5" aria-hidden>
-                  <span className="size-2.5 rounded-full bg-[#D9DFEE]" />
-                  <span className="size-2.5 rounded-full bg-[#D9DFEE]" />
-                  <span className="size-2.5 rounded-full bg-[#D9DFEE]" />
+                  <span className="size-2.5 rounded-full bg-border" />
+                  <span className="size-2.5 rounded-full bg-border" />
+                  <span className="size-2.5 rounded-full bg-border" />
                 </div>
                 <span className="rounded bg-[#FFE45C] px-1.5 py-0.5 font-mono text-[11px] font-medium">MATH 2210</span>
                 <span className="text-sm font-medium">Finals barkada: Linear Algebra</span>
                 <div className="ml-auto flex items-center gap-2">
                   <div className="flex -space-x-2">
                     {Object.values(people).map((p) => (
-                      <span key={p.name} className="rounded-full ring-2 ring-white">
+                      <span key={p.name} className="rounded-full ring-2 ring-card">
                         <Initial name={p.name} color={p.color} size={24} />
                       </span>
                     ))}
@@ -133,7 +167,7 @@ export function AuthShowcase() {
 
               <div className="grid grid-cols-[1.35fr_1fr]">
                 {/* notes */}
-                <div className="relative min-h-[390px] border-r border-[#D9DFEE] p-6">
+                <div className="relative min-h-[390px] border-r bg-white p-6 text-[#101A33]">
                   <Cursor name="Miguel" color={people.miguel.color} path={{ left: ["18%", "55%", "40%"], top: ["62%", "68%", "80%"] }} duration={8} />
                   <Cursor name="Ligaya" color={people.ligaya.color} path={{ left: ["64%", "30%", "72%"], top: ["34%", "42%", "30%"] }} duration={10} delay={1} />
                   <h3 className="font-display text-2xl font-bold">Eigenvalues: exam review</h3>
@@ -157,7 +191,7 @@ export function AuthShowcase() {
                 </div>
 
                 {/* chat */}
-                <div className="flex min-h-[390px] flex-col justify-end gap-3 bg-[#F4F6FB] p-4">
+                <div className="flex min-h-[390px] flex-col justify-end gap-3 bg-background/40 p-4">
                   <AnimatePresence initial={false} mode="popLayout">
                     {shown.map((m) => {
                       const p = people[m.who];
@@ -166,41 +200,23 @@ export function AuthShowcase() {
                           <Initial name={p.name} color={p.color} size={26} />
                           <div className="min-w-0">
                             <div className="text-[11px] font-semibold">{p.name}</div>
-                            <p className="text-[13px] leading-snug text-[#26304B]">{m.text}</p>
+                            <p className="text-[13px] leading-snug text-foreground/85">{m.text}</p>
                           </div>
                         </motion.div>
                       );
                     })}
                   </AnimatePresence>
-                  <div className="h-4 text-[11px] text-[#5B6683]">{typing ? `${people[typing.who].name} is typing…` : ""}</div>
+                  <div className="h-4 text-[11px] text-muted-foreground">{typing ? `${people[typing.who].name} is typing…` : ""}</div>
                 </div>
               </div>
             </motion.div>
           </div>
 
           {/* floating cards */}
-          <motion.div
-            className="absolute top-[452px] left-3 z-20 flex items-center gap-3 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 shadow-xl backdrop-blur-md"
-            animate={float}
-            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <div className="flex -space-x-2">
-              {Object.values(people).map((p) => (
-                <span key={p.name} className="rounded-full ring-2 ring-[#1B2468]">
-                  <Initial name={p.name} color={p.color} size={28} />
-                </span>
-              ))}
-            </div>
-            <div className="text-sm">
-              <div className="flex items-center gap-1.5 font-medium">
-                <span className="size-2 rounded-full bg-[#3DDC97]" /> 3 online
-              </div>
-              <div className="text-xs text-white/60">Ligaya, Miguel at Andrea</div>
-            </div>
-          </motion.div>
+          <PresenceCard float={float} />
 
           <motion.div
-            className="absolute top-[404px] right-2 z-20 flex items-center gap-2.5 rounded-xl bg-[#101A33] px-4 py-3 text-sm font-medium shadow-2xl ring-1 ring-white/15"
+            className="absolute top-[404px] right-2 z-20 flex items-center gap-2.5 rounded-xl bg-[#101A33] px-4 py-3 text-sm font-medium text-white shadow-2xl ring-1 ring-white/15"
             animate={reduce ? undefined : { y: [0, 8, 0] }}
             transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
           >
@@ -220,6 +236,7 @@ export function AuthShowcase() {
           </motion.div>
          </div>
         </div>
+        </TiltCard>
       </div>
     </div>
   );

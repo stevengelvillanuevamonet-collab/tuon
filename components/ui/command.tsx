@@ -14,10 +14,10 @@ function CommandDialog({
   return (
     <DialogPrimitive.Root {...props}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[#0d1222]/50 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[#0d1222]/45 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
         <DialogPrimitive.Content
           aria-describedby={undefined}
-          className="fixed top-[18%] left-1/2 z-50 w-full max-w-[calc(100%-2rem)] -translate-x-1/2 overflow-hidden rounded-xl border bg-popover shadow-2xl sm:max-w-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
+          className="fixed top-[18%] left-1/2 z-50 w-full max-w-[calc(100%-2rem)] -translate-x-1/2 overflow-hidden rounded-2xl border bg-popover/80 shadow-[0_30px_80px_-20px_rgba(8,12,40,0.55)] backdrop-blur-2xl backdrop-saturate-150 sm:max-w-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
         >
           <DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title>
           <Command>{children}</Command>
@@ -30,7 +30,7 @@ function CommandDialog({
 function Command({ className, ...props }: React.ComponentProps<typeof CommandPrimitive>) {
   return (
     <CommandPrimitive
-      className={cn("flex h-full w-full flex-col overflow-hidden rounded-[inherit] bg-popover text-popover-foreground", className)}
+      className={cn("flex h-full w-full flex-col overflow-hidden rounded-[inherit] bg-transparent text-popover-foreground", className)}
       {...props}
     />
   );
@@ -69,7 +69,7 @@ function CommandItem({ className, ...props }: React.ComponentProps<typeof Comman
   return (
     <CommandPrimitive.Item
       className={cn(
-        "relative flex cursor-default items-center gap-2.5 rounded-md px-2.5 py-2 text-sm outline-none select-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-accent [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground",
+        "relative flex cursor-default items-center gap-2.5 rounded-md px-2.5 py-2 text-sm outline-none select-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-primary/12 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground",
         className,
       )}
       {...props}

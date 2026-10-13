@@ -30,7 +30,12 @@ If you later need Google-Docs-style simultaneous typing, swap the textarea for C
 ## UI components
 
 - **shadcn/ui primitives** in `components/ui` (button, dialog, sheet, dropdown, command, resizable panels, scroll area, tabs, tooltip, sonner…).
-- **Effects in `components/magic`**, written in the style of [Aceternity UI](https://ui.aceternity.com) and [Magic UI](https://magicui.design): `Spotlight`, `BorderBeam`, `ShimmerButton`, `BentoGrid`, `DotPattern`. They're self-contained, so you can replace any with the official version, e.g. `npx shadcn@latest add "https://magicui.design/r/border-beam"`.
+- **Effects in `components/magic`**, written in the style of [Aceternity UI](https://ui.aceternity.com) and [Magic UI](https://magicui.design). They're self-contained, so you can swap any for the official version, e.g. `npx shadcn@latest add @magicui/border-beam`.
+  - Text: `ShinyText`, `AuroraText`, `BlurText` (headline reveal), `NumberTicker`
+  - Surfaces: `MagicCard` (spotlight), `GlowingEdge` (border lights up toward the cursor), `TiltCard` (3D tilt), `BorderBeam`, `BentoGrid`
+  - Controls and data: `Dock` (magnifying floating dock), `AvatarCircles`, `AnimatedBeam`, `ShimmerButton`
+- **The Aurora background** (`components/three`): one fragment shader in three.js, mounted once in `app/layout.tsx` by `SceneHost`. `three` is imported on demand, so it isn't in the first-load bundle. It runs at ~60% resolution, pauses when the tab is hidden, and honours `prefers-reduced-motion`. How hard it works depends on the route (see `modeForPath`): full on the landing and auth pages, calm (30 fps, dimmed) on `/rooms`, a still frame inside a room. People can turn it off, or keep it moving in rooms, from the account menu (`tuon-bg-paused`, `tuon-bg-in-rooms` in localStorage).
+- **Glass**: the `glass` utility in `globals.css` (frosted card surface) is used by the dock, auth card and the open-to-join list. Dialogs, the command menu and toasts share the same frosted treatment.
 - **The highlighter**: notes support `==text==` which renders as a marker highlight (a small remark plugin in `components/room/markdown.tsx`).
 
 ## Setup

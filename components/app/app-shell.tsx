@@ -226,7 +226,7 @@ export function AppShell({ rooms, profile, children }: { rooms: MyRoom[]; profil
         <Collapsible
           open={!sidebarCollapsed}
           onOpenChange={(open) => setSidebarCollapsed(!open)}
-          className={cn("hidden h-full shrink-0 border-r bg-card/60 transition-[width] duration-200 md:block", sidebarCollapsed ? "w-14" : "w-64")}
+          className={cn("hidden h-full shrink-0 border-r bg-card/60 backdrop-blur-xl transition-[width] duration-200 md:block", sidebarCollapsed ? "w-14" : "w-64")}
         >
           {sidebarCollapsed ? (
             <SidebarRail rooms={rooms} profile={profile} onCreate={() => setCreateOpen(true)} onSearch={() => setSearchOpen(true)} />

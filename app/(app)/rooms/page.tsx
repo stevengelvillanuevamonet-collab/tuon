@@ -3,6 +3,9 @@ import Link from "next/link";
 import { ArrowUpRight, Lock } from "lucide-react";
 import { JoinByCodeForm } from "@/components/app/join-by-code-form";
 import { JoinRoomButton } from "@/components/app/join-room-button";
+import { GlowingEdge } from "@/components/magic/glowing-edge";
+import { MagicCard } from "@/components/magic/magic-card";
+import { NumberTicker } from "@/components/magic/number-ticker";
 import { Badge } from "@/components/ui/badge";
 import { getMyRooms, requireSession } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
@@ -31,6 +34,14 @@ export default async function RoomsPage() {
           <div>
             <h1 className="text-3xl font-bold">Hi {profile.display_name.split(" ")[0]}, where to?</h1>
             <p className="mt-1 text-muted-foreground">Pick up where your group left off.</p>
+            <p className="mt-3 text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground"><NumberTicker value={mine.length} /></span> {mine.length === 1 ? "room" : "rooms"} of yours
+              {discover.length > 0 && (
+                <>
+                  , <span className="font-semibold text-foreground"><NumberTicker value={discover.length} /></span> open to join
+                </>
+              )}
+            </p>
           </div>
           <JoinByCodeForm />
         </div>
@@ -48,7 +59,9 @@ export default async function RoomsPage() {
             <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {mine.map(({ rooms: r, role }) => (
                 <li key={r.id}>
-                  <Link href={`/rooms/${r.id}`} className="group flex h-full flex-col rounded-xl border bg-card p-4 transition-colors hover:border-primary/50">
+                  <GlowingEdge className="h-full rounded-xl">
+                  <MagicCard className="h-full rounded-xl border bg-card/80 backdrop-blur-sm">
+                  <Link href={`/rooms/${r.id}`} className="group flex h-full flex-col p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     <div className="flex items-center justify-between">
                       {r.courses ? <Badge variant="course">{r.courses.code}</Badge> : <Badge variant="secondary">Personal</Badge>}
                       <ArrowUpRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
@@ -64,6 +77,8 @@ export default async function RoomsPage() {
                       <span className="capitalize">{role}</span>
                     </div>
                   </Link>
+                  </MagicCard>
+                  </GlowingEdge>
                 </li>
               ))}
             </ul>
@@ -75,7 +90,7 @@ export default async function RoomsPage() {
             <h2 id="discover" className="text-lg font-semibold">
               Open to join
             </h2>
-            <ul className="mt-4 divide-y rounded-xl border bg-card">
+            <ul className="glass mt-4 divide-y rounded-xl">
               {discover.map((r) => (
                 <li key={r.id} className="flex items-center gap-3 p-4">
                   {r.courses ? <Badge variant="course">{r.courses.code}</Badge> : <Badge variant="secondary">Open</Badge>}

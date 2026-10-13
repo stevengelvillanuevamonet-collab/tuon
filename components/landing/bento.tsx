@@ -1,6 +1,7 @@
-import { History, Users } from "lucide-react";
+import { History } from "lucide-react";
 import { BentoCard, BentoGrid } from "@/components/magic/bento-grid";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { PresenceBeam } from "./presence-beam";
 
 const colors = ["#E5484D", "#12A594", "#8E4EC6", "#F76B15"];
 
@@ -44,26 +45,6 @@ function MiniMarkdown() {
   );
 }
 
-function MiniPresence() {
-  return (
-    <div className="space-y-3 rounded-xl border bg-background p-4">
-      <div className="flex -space-x-2">
-        {colors.map((c, i) => (
-          <div key={c} className="relative">
-            <Avatar className="size-9 ring-2 ring-background">
-              <AvatarFallback style={{ background: c }}>{"LMAJ"[i]}</AvatarFallback>
-            </Avatar>
-            {i < 3 && <span className="absolute right-0 bottom-0 size-2.5 rounded-full bg-online ring-2 ring-background" />}
-          </div>
-        ))}
-      </div>
-      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Users className="size-4" /> Jomar is editing “Week 4”
-      </p>
-    </div>
-  );
-}
-
 function MiniHistory() {
   const rows = [
     ["Today, 9:41 PM", "Ligaya"],
@@ -103,7 +84,7 @@ export function Bento() {
         className="rounded-xl md:col-span-2"
         title="See who's here"
         description="Presence shows who's online and which note they're writing, so nobody types over anybody."
-        visual={<MiniPresence />}
+        visual={<PresenceBeam />}
       />
       <BentoCard
         className="rounded-[28px] md:col-span-4"

@@ -8,7 +8,7 @@ export function Toaster(props: ToasterProps) {
       position="bottom-right"
       toastOptions={{
         classNames: {
-          toast: "!bg-popover !text-popover-foreground !border-border !rounded-lg !shadow-lg",
+          toast: "!bg-popover/80 !backdrop-blur-xl !text-popover-foreground !border-border !rounded-xl !shadow-xl",
           description: "!text-muted-foreground",
           actionButton: "!bg-primary !text-primary-foreground",
         },
